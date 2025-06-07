@@ -1,8 +1,10 @@
 //socket.js
 let socket; // don't export it directly
 
-export function setupSocket(onMessageCallback, onOpenCallback, onCloseCallback) {
-  socket = new WebSocket("ws://" + location.host + "/game");
+export function setupSocket(token,onMessageCallback, onOpenCallback, onCloseCallback) {
+  if(token === null)
+    return;
+  socket = new WebSocket("ws://" + location.host + `/game?token=${token}`);
 
   socket.onmessage = onMessageCallback;
   socket.onopen = onOpenCallback;

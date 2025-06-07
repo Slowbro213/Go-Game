@@ -8,6 +8,7 @@ import (
 
 type Player struct {
 	ID   int
+	UserID string
 	X    float64
 	Y    float64
 	Conn *websocket.Conn 
@@ -19,9 +20,10 @@ type Player struct {
 
 
 
-func NewPlayer(id int, x, y float64, conn *websocket.Conn,l *log.Logger) *Player {
+func NewPlayer(id int,userID string, x, y float64, conn *websocket.Conn,l *log.Logger) *Player {
 	p := &Player{
 		ID:   id,
+		UserID: userID,
 		X:    x,
 		Y:    y,
 		Conn: conn,

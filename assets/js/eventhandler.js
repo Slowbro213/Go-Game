@@ -34,6 +34,7 @@ function PositionUpdate(data,players,game_container){
         game_container.appendChild(newPlayer);
         const newAnimation = createAnimator(newPlayer);
         players.set(playerId,newAnimation);
+        newAnimation.setPosition(x,y);
       }else {
         const currAnimator = players.get(playerId);
         currAnimator.updatePosition(x, y);

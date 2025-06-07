@@ -14,6 +14,20 @@ export function createAnimator(character) {
     }
   }
 
+  function setPosition(x, y) {
+    if (animationId) {
+      cancelAnimationFrame(animationId);
+      animationId = null;
+    }
+    
+    targetX = x;
+    targetY = y;
+    currentX = x;
+    currentY = y;
+    
+    character.style.transform = `translate(${x}px, ${y}px)`;
+  }
+
   function animate() {
     const dx = targetX - currentX;
     const dy = targetY - currentY;
@@ -32,5 +46,5 @@ export function createAnimator(character) {
     character.style.transform = `translate(${currentX}px, ${currentY}px)`;
   }
 
-  return { updatePosition };
+  return { updatePosition , setPosition};
 }

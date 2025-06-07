@@ -7,6 +7,7 @@ import (
 	"log"
 	"github.com/gorilla/websocket"
 	"gametry.com/handlers"
+	"gametry.com/middleware"
 	"github.com/gorilla/sessions"
 	"os"
 )
@@ -30,6 +31,7 @@ func main() {
 
 
 
+
 	//Auth Services
 	key   := []byte("super-secret-key-12345678") // 16, 24, or 32 bytes
 	store := sessions.NewCookieStore(key)
@@ -39,6 +41,11 @@ func main() {
 		HttpOnly: true,
 		// Secure: true, // Enable this in production
 	}
+
+
+	authService := middleware.NewAuthService(store, log.New(os.Stdout, "AUTH: ", log.LstdFlags))
+
+
 	l := log.New(os.Stdout, "SessionHandler: ", log.LstdFlags)
 	sh := handlers.NewSessionHandler(store,l)
 	http.HandleFunc("/secret", sh.Secret)
@@ -54,12 +61,22 @@ func main() {
 	//Game WebSocket Service
 	l = log.New(os.Stdout, "GameHandler: ", log.LstdFlags)
 	gh := handlers.NewGameHandler(l,&upgrader,store)
-	http.HandleFunc("/game", gh.Match )
+	http.HandleFunc("/game", middleware.Chain(
+		gh.Match,
+		middleware.Logging(),
+		authService.AuthMiddleware(),
+		middleware.Method("GET"),
+	))
 
 
 
 
-	http.HandleFunc("/game/auth", gh.Auth)
+	http.HandleFunc("/game/join", middleware.Chain(
+		gh.Join,
+		middleware.Logging(),
+		authService.AuthMiddleware(),
+		middleware.Method("GET"),
+		))
 	//Server Start
 	fmt.Println("Server running at http://localhost:8080/")
 	http.ListenAndServe("0.0.0.0:8080", nil)

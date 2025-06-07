@@ -4,7 +4,6 @@ import { setupInput, startSendingKeys, stopSendingKeys } from './input.js';
 import { createAnimator } from './animation.js';
 import { HandleEvent } from './eventhandler.js';
 
-const request = fetch('/game/auth');
 const game_container = document.getElementById("game-container");
 const log = document.getElementById("log");
 
@@ -13,25 +12,30 @@ const log = document.getElementById("log");
 const players = new Map();
 let myID = null;
 
-const response = await request;
+const response = await fetch('/game/join');
+let player_id = null;
+let token = null;
 if (response.ok) {
-  const idText = await response.text(); // Reads response body as plain text
-  const id = parseInt(idText, 10);      // Convert to integer (optional)
-  myID = id;
-  console.log("Auth ID:", id);
+  const data = await response.json();
+  player_id = data.player_id;
+  token = data.token;
+  console.log(player_id);
+  console.log(token);
+  myID = player_id
 } else {
-  console.error("Auth failed with status:", response.status);
   switch(response.status){
-    case 401: window.location.href="/error/unauth"; break;
-    case 403: window.location.href="/error/duplicate"; break;
-
-
+    case 401: window.location.href = "/error/unauth"; break;
+    case 403: window.location.href = "/error/duplicate"; break;
+    case 503: window.location.href = "/error/max"; break;
   }
-
+  throw new Error("Couldnt Join")
 }
+
+
+
 setupInput();
 
-setupSocket(
+setupSocket( token ,
   (e) => {
     //log.textContent += "Server: " + e.data + "\n";
     const event = JSON.parse(e.data);
