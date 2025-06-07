@@ -6,6 +6,9 @@ import (
 	"net/http"
 	"time"
 
+
+	"gametry.com/utils"
+
 	"github.com/gorilla/sessions"
 )
 
@@ -66,7 +69,7 @@ func (s *SessionHandler) Login(w http.ResponseWriter, r *http.Request) {
 	// Regenerate session ID on login to prevent session fixation
 	session.Options.MaxAge = sessionMaxAge
 	session.Values["authenticated"] = true
-	session.Values["player_id"] = -1
+	session.Values["player_id"] = utils.GenerateToken()
 	session.Values["login_time"] = time.Now().Unix()
 	session.Values["user_agent"] = r.UserAgent()
 	session.Values["ip_address"] = r.RemoteAddr

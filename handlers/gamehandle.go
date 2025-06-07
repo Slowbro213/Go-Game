@@ -2,53 +2,66 @@ package handlers
 
 
 import (
-	"fmt"
+
 	"net/http"
+
+	"fmt"
 	"log"
 	"os"
-	"github.com/gorilla/websocket"
+	"time"
+
 	"gametry.com/player"
+	"gametry.com/middleware"
+	"gametry.com/utils"
+
+
 	"sync"
-	"errors"
+
 	"encoding/json"
+
 	"github.com/gorilla/sessions"
+	"github.com/gorilla/websocket"
 
 )
 
-type AuthStatus int
 
-const (
-	AuthOK AuthStatus = iota
-	AuthUnauthenticated
-	AuthDuplicate
-)
-
-type AuthResult struct {
-	Status  AuthStatus
-	ID      int
-	Session *sessions.Session
-}
 
 type Event struct{
 	Type string
 	Data map[string]interface{}
 }
-
+type PendingConnection struct {
+	PlayerID int
+	Expires  time.Time
+}
 
 type GameHandler struct{
+
 	log *log.Logger
 	upgrader *websocket.Upgrader
+
 	playersMu sync.Mutex
-	players map[int]*player.Player 
+	players []*player.Player 
+	users map[string]struct{}
+
+	tokensMu      sync.Mutex
+	pendingTokens map[string]*PendingConnection
+
 	store *sessions.CookieStore
 	nextID int
 }
+
+const (
+	maxPlayers = 10
+)
 
 func NewGameHandler(l* log.Logger, u* websocket.Upgrader, s* sessions.CookieStore) *GameHandler {
 	return &GameHandler{
 		log: l,
 		upgrader: u,
-		players : make(map[int]*player.Player),
+		players : make([]*player.Player, maxPlayers),
+		users: make(map[string]struct{}),
+		pendingTokens: make(map[string]*PendingConnection),
 		store: s,
 	}
 }
@@ -56,85 +69,102 @@ func NewGameHandler(l* log.Logger, u* websocket.Upgrader, s* sessions.CookieStor
 
 
 
-func (g *GameHandler) checkAuth(r *http.Request) (AuthResult, error) {
-	session, err := g.store.Get(r, "poked-cookie")
-	if err != nil {
-		return AuthResult{Status: AuthUnauthenticated}, fmt.Errorf("session retrieval failed: %w", err)
-	}
+func (g *GameHandler) Join(w http.ResponseWriter, r *http.Request) {
+    // Get authenticated player ID from context
+    playerID, ok := r.Context().Value(middleware.ContextPlayerID).(string)
+    if !ok {
+        http.Error(w, "Unauthorized", http.StatusUnauthorized)
+        return
+    }
 
-	auth, ok := session.Values["authenticated"].(bool)
-	if !ok || !auth {
-		return AuthResult{Status: AuthUnauthenticated}, errors.New("unauthenticated access")
-	}
+    // Early check for duplicates without full lock
+    g.tokensMu.Lock()
+    _, exists := g.users[playerID]
+    g.tokensMu.Unlock()
+    
+    if exists {
+        http.Error(w, "Duplicate", http.StatusForbidden)
+        return
+    }
 
-	id, ok := session.Values["player_id"].(int)
-	if !ok {
-		return AuthResult{Status: AuthOK, ID: -1, Session: session}, nil
-	}
+    // Generate token before taking locks
+    token := utils.GenerateToken()
 
-	g.playersMu.Lock()
-	_, exists := g.players[id]
-	g.playersMu.Unlock()
+    // Find available slot
+    g.playersMu.Lock()
+    slot, found := -1, false
+    for i := 0; i < maxPlayers; i++ {
+        if g.players[g.nextID] == nil {
+            slot = g.nextID
+            found = true
+            g.nextID = (g.nextID + 1) % maxPlayers
+            break
+        }
+        g.nextID = (g.nextID + 1) % maxPlayers
+    }
+    g.playersMu.Unlock()
 
-	if exists {
-		return AuthResult{Status: AuthDuplicate, ID: id, Session: session}, errors.New("duplicate connection")
-	}
+    if !found {
+        http.Error(w, "Maximum player capacity reached", http.StatusServiceUnavailable)
+        return
+    }
 
-	return AuthResult{Status: AuthOK, ID: id, Session: session}, nil
-}
+    // Final reservation with all locks
+    g.tokensMu.Lock()
+    defer g.tokensMu.Unlock()
 
+    // Double-check after lock
+    if _, exists := g.users[playerID]; exists {
+        http.Error(w, "Duplicate", http.StatusForbidden)
+        return
+    }
 
+    g.users[playerID] = struct{}{}
+    g.pendingTokens[token] = &PendingConnection{
+        PlayerID: slot,
+        Expires:  time.Now().Add(30 * time.Second),
+    }
 
-func (g *GameHandler) Auth(w http.ResponseWriter, r *http.Request) {
-	result, err := g.checkAuth(r)
-	if err != nil {
-		switch result.Status {
-		case AuthUnauthenticated:
-			http.Error(w, "Unauthenticated", http.StatusUnauthorized)
-		case AuthDuplicate:
-			http.Error(w, "Duplicate connection", http.StatusForbidden)
-		default:
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		}
-		g.log.Println(err)
-		return
-	}
-
-	id := result.ID
-	if id == -1 {
-		g.playersMu.Lock()
-		id = g.nextID
-		g.nextID++
-		g.playersMu.Unlock()
-
-		result.Session.Values["player_id"] = id
-		if err := result.Session.Save(r, w); err != nil {
-			g.log.Println("Failed to save session:", err)
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			return
-		}
-	}   
-
-	g.log.Println("Auth Success for ID:", id)
-	fmt.Fprintf(w, "%d", id)
+    json.NewEncoder(w).Encode(map[string]interface{}{
+        "player_id": slot,
+        "token":     token,
+    })
 }
 
 func (g *GameHandler) Match(w http.ResponseWriter, r *http.Request) {
-	result, err := g.checkAuth(r)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusForbidden)
+
+	token := r.URL.Query().Get("token")
+	if token == "" {
+		http.Error(w, "Missing token", http.StatusBadRequest)
+		return
+	}
+	playerID, ok := r.Context().Value(middleware.ContextPlayerID).(string)
+	if !ok {
+		g.log.Println(fmt.Sprintf("UserID: %s",playerID))
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	// Validate and consume token
+	g.tokensMu.Lock()
+	pending, exists := g.pendingTokens[token]
+	delete(g.pendingTokens, token) // One-time use
+	g.tokensMu.Unlock()
+
+	if !exists || time.Now().After(pending.Expires) {
+		http.Error(w, "Invalid token", http.StatusForbidden)
 		return
 	}
 
+	// Proceed with WebSocket upgrade using the validated playerID
+	Id := pending.PlayerID
 	conn, err := g.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		g.log.Println("WebSocket upgrade error:", err)
 		return
 	}
 
-	Id := result.ID
 	l := log.New(os.Stdout, fmt.Sprintf("Player %d: ",Id), log.LstdFlags)
-	p := player.NewPlayer(Id, 0, 0, conn,l)
+	p := player.NewPlayer(Id,playerID, 0, 0, conn,l)
 
 	g.playersMu.Lock()
 	g.players[Id] = p
@@ -153,7 +183,27 @@ func (g *GameHandler) Match(w http.ResponseWriter, r *http.Request) {
 		g.log.Println("JSON marshal error:", err)
 		return
 	}
-	g.broadcastMessage(jsonData)
+	go g.broadcastMessage(jsonData)
+
+	positions := g.getPositions()
+	if err != nil {
+		g.log.Println("JSON marshal error:", err)
+		return
+	}
+
+	event := map[string]interface{}{
+		"type": "position_update",
+		"data": map[string]interface{}{
+			"positions": positions,
+		},
+	}
+	jsonData, err = json.Marshal(event)
+	if err != nil {
+		g.log.Println("JSON marshal error:", err)
+		return
+	}
+
+	go g.broadcastMessage(jsonData)
 
 	// Handle player connection
 	go g.handlePlayerConnection(p)
@@ -177,7 +227,10 @@ func (g *GameHandler) handlePlayerConnection(p *player.Player) {
 		p.Conn.Close()
 		g.playersMu.Lock()
 		id := p.ID
-		delete(g.players, id)
+		userID := p.UserID
+		g.players[id] = nil
+		delete(g.users, userID)
+		g.StartTokenCleanup()
 		g.playersMu.Unlock()
 		g.log.Println("User Left:", id)
 	}()
@@ -238,8 +291,10 @@ func (g *GameHandler) getPositions() map[int][2]float64{
 
 	positions := make(map[int][2]float64)
 	for id, player := range g.players {
-		x, y := player.Position()
-		positions[id] = [2]float64{x, y}
+		if player != nil {
+			x, y := player.Position()
+			positions[id] = [2]float64{x, y}
+		}
 	}
 
 	return positions
@@ -248,6 +303,31 @@ func (g *GameHandler) getPositions() map[int][2]float64{
 
 func (g* GameHandler) broadcastMessage(bytes []byte) {
 	for _, player := range g.players {
-		player.Notify(bytes)
+		if player != nil{
+			player.Notify(bytes)
+		}
+	}
+}
+
+
+
+func (g *GameHandler) StartTokenCleanup() {
+	go func() {
+		for {
+			time.Sleep(1 * time.Minute)
+			g.cleanupExpiredTokens()
+		}
+	}()
+}
+
+func (g *GameHandler) cleanupExpiredTokens() {
+	g.tokensMu.Lock()
+	defer g.tokensMu.Unlock()
+	
+	now := time.Now()
+	for token, pc := range g.pendingTokens {
+		if now.After(pc.Expires) {
+			delete(g.pendingTokens, token)
+		}
 	}
 }
