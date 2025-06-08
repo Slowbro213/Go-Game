@@ -22,6 +22,7 @@ export function setupInput() {
         temps.add(opposite)
       }
       pressedKeys.add(key);
+      sendKeys()
     }
   });
 
@@ -34,12 +35,13 @@ export function setupInput() {
     }
     pressedKeys.delete(key);
     temps.delete(key);
+    sendKeys()
   });
 }
 
 export function sendKeys() {
-  const keys = Array.from(pressedKeys).sort().join('');
-  if (socket.readyState === WebSocket.OPEN && keys.length > 0) {
+  const keys = Array.from(pressedKeys);
+  if (socket.readyState === WebSocket.OPEN) {
     socket.send(keys);
   }
   else{
@@ -48,22 +50,22 @@ export function sendKeys() {
   }
 }
 
-let sendKeysIntervalId = null;
-
-export function startSendingKeys() {
-  console.log("sending...")
-  let lastSent = 0;
-
-  const send = (now) => {
-    if (now - lastSent >= 5 && pressedKeys.size > 0) {
-      sendKeys();
-      lastSent = now;
-    }
-    sendKeysIntervalId = requestAnimationFrame(send);
-  };
-  sendKeysIntervalId = requestAnimationFrame(send);
-}
-
-export function stopSendingKeys() {
-  if (sendKeysIntervalId) clearInterval(sendKeysIntervalId);
-}
+//let sendKeysIntervalId = null;
+//
+//export function startSendingKeys() {
+//  console.log("sending...")
+//  let lastSent = 0;
+//
+//  const send = (now) => {
+//    if (now - lastSent >= 5 && pressedKeys.size > 0) {
+//      sendKeys();
+//      lastSent = now;
+//    }
+//    sendKeysIntervalId = requestAnimationFrame(send);
+//  };
+//  sendKeysIntervalId = requestAnimationFrame(send);
+//}
+//
+//export function stopSendingKeys() {
+//  if (sendKeysIntervalId) clearInterval(sendKeysIntervalId);
+//}

@@ -1,6 +1,6 @@
 //game.js
 import { socket, setupSocket } from './socket.js';
-import { setupInput, startSendingKeys, stopSendingKeys } from './input.js';
+import { setupInput } from './input.js';
 import { createAnimator } from './animation.js';
 import { HandleEvent } from './eventhandler.js';
 
@@ -52,9 +52,9 @@ setupSocket( token ,
     game_container.appendChild(newPlayer);
     const newAnimation = createAnimator(newPlayer);
     players.set(myID,newAnimation);
-    startSendingKeys();
+    //startSendingKeys();
   },
   () => {
-    stopSendingKeys();
+    //stopSendingKeys();
   }
 );

@@ -47,7 +47,6 @@ func (a *AuthService) AuthMiddleware() Middleware {
 			if !result.Authenticated {
 				if result.Error != nil {
 					a.log.Printf("Unauthenticated request: %v", result.Error)
-					http.ServeFile(w,r,"../views/errors/unauthenticated.html")
 					http.Error(w, "Please login first", http.StatusUnauthorized)
 					return
 				}

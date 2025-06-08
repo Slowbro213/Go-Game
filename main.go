@@ -12,7 +12,8 @@ import (
 	"os"
 )
 
-var upgrader = websocket.Upgrader{}
+var upgrader = websocket.Upgrader{
+}
 
 
 func main() {

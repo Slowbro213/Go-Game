@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"fmt"
+	"math"
 	"log"
 	"os"
 	"time"
@@ -47,88 +48,120 @@ type GameHandler struct{
 	tokensMu      sync.Mutex
 	pendingTokens map[string]*PendingConnection
 
+
+	tickInterval time.Duration 
+  tickChan     chan struct{}
+
 	store *sessions.CookieStore
 	nextID int
 }
 
 const (
 	maxPlayers = 10
+	fps = 24
+	pxps = 600 //pixels per second aka player speed
 )
 
 func NewGameHandler(l* log.Logger, u* websocket.Upgrader, s* sessions.CookieStore) *GameHandler {
-	return &GameHandler{
+	h := &GameHandler{
 		log: l,
 		upgrader: u,
+		store: s,
+
 		players : make([]*player.Player, maxPlayers),
 		users: make(map[string]struct{}),
 		pendingTokens: make(map[string]*PendingConnection),
-		store: s,
+
+		tickInterval: time.Duration(int(math.Round(1000.0 / fps))) * time.Millisecond,
+    tickChan:     make(chan struct{}, 1),
+
+	}
+
+	go h.runGameLoop() 
+
+	return h
+}
+
+func (g *GameHandler) runGameLoop() {
+	ticker := time.NewTicker(g.tickInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+
+
+			g.updatePositions()
+
+			g.broadcastPositions()
+
+		case <-g.tickChan:
+			return // For graceful shutdown
+		}
 	}
 }
 
 
-
-
 func (g *GameHandler) Join(w http.ResponseWriter, r *http.Request) {
-    // Get authenticated player ID from context
-    playerID, ok := r.Context().Value(middleware.ContextPlayerID).(string)
-    if !ok {
-        http.Error(w, "Unauthorized", http.StatusUnauthorized)
-        return
-    }
+	// Get authenticated player ID from context
+	playerID, ok := r.Context().Value(middleware.ContextPlayerID).(string)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
 
-    // Early check for duplicates without full lock
-    g.tokensMu.Lock()
-    _, exists := g.users[playerID]
-    g.tokensMu.Unlock()
-    
-    if exists {
-        http.Error(w, "Duplicate", http.StatusForbidden)
-        return
-    }
+	// Early check for duplicates without full lock
+	g.tokensMu.Lock()
+	_, exists := g.users[playerID]
+	g.tokensMu.Unlock()
 
-    // Generate token before taking locks
-    token := utils.GenerateToken()
+	if exists {
+		http.Error(w, "Duplicate", http.StatusForbidden)
+		return
+	}
 
-    // Find available slot
-    g.playersMu.Lock()
-    slot, found := -1, false
-    for i := 0; i < maxPlayers; i++ {
-        if g.players[g.nextID] == nil {
-            slot = g.nextID
-            found = true
-            g.nextID = (g.nextID + 1) % maxPlayers
-            break
-        }
-        g.nextID = (g.nextID + 1) % maxPlayers
-    }
-    g.playersMu.Unlock()
+	// Generate token before taking locks
+	token := utils.GenerateToken()
 
-    if !found {
-        http.Error(w, "Maximum player capacity reached", http.StatusServiceUnavailable)
-        return
-    }
+	// Find available slot
+	g.playersMu.Lock()
+	slot, found := -1, false
+	for i := 0; i < maxPlayers; i++ {
+		if g.players[g.nextID] == nil {
+			slot = g.nextID
+			found = true
+			g.nextID = (g.nextID + 1) % maxPlayers
+			break
+		}
+		g.nextID = (g.nextID + 1) % maxPlayers
+	}
+	g.playersMu.Unlock()
 
-    // Final reservation with all locks
-    g.tokensMu.Lock()
-    defer g.tokensMu.Unlock()
+	if !found {
+		http.Error(w, "Maximum player capacity reached", http.StatusServiceUnavailable)
+		return
+	}
 
-    // Double-check after lock
-    if _, exists := g.users[playerID]; exists {
-        http.Error(w, "Duplicate", http.StatusForbidden)
-        return
-    }
+	// Final reservation with all locks
+	g.tokensMu.Lock()
+	defer g.tokensMu.Unlock()
 
-    g.users[playerID] = struct{}{}
-    g.pendingTokens[token] = &PendingConnection{
-        PlayerID: slot,
-        Expires:  time.Now().Add(30 * time.Second),
-    }
+	// Double-check after lock
+	if _, exists := g.users[playerID]; exists {
+		http.Error(w, "Duplicate", http.StatusForbidden)
+		return
+	}
 
-    json.NewEncoder(w).Encode(map[string]interface{}{
-        "player_id": slot,
-        "token":     token,
-    })
+	g.users[playerID] = struct{}{}
+	g.pendingTokens[token] = &PendingConnection{
+		PlayerID: slot,
+		Expires:  time.Now().Add(30 * time.Second),
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"player_id": slot,
+		"token":     token,
+	})
 }
 
 func (g *GameHandler) Match(w http.ResponseWriter, r *http.Request) {
@@ -164,7 +197,7 @@ func (g *GameHandler) Match(w http.ResponseWriter, r *http.Request) {
 	}
 
 	l := log.New(os.Stdout, fmt.Sprintf("Player %d: ",Id), log.LstdFlags)
-	p := player.NewPlayer(Id,playerID, 0, 0, conn,l)
+	p := player.NewPlayer(Id,playerID, 0, 0,pxps, conn,l)
 
 	g.playersMu.Lock()
 	g.players[Id] = p
@@ -183,7 +216,7 @@ func (g *GameHandler) Match(w http.ResponseWriter, r *http.Request) {
 		g.log.Println("JSON marshal error:", err)
 		return
 	}
-	go g.broadcastMessage(jsonData)
+	g.broadcastMessage(jsonData)
 
 	positions := g.getPositions()
 	if err != nil {
@@ -203,7 +236,7 @@ func (g *GameHandler) Match(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	go g.broadcastMessage(jsonData)
+	g.broadcastMessage(jsonData)
 
 	// Handle player connection
 	go g.handlePlayerConnection(p)
@@ -235,7 +268,6 @@ func (g *GameHandler) handlePlayerConnection(p *player.Player) {
 		g.log.Println("User Left:", id)
 	}()
 
-	step := 10
 
 	for {
 		_, msg, err := p.Conn.ReadMessage()
@@ -246,60 +278,67 @@ func (g *GameHandler) handlePlayerConnection(p *player.Player) {
 			return
 		}
 
-		if len(msg) > 0 {
-			g.processMovement(p, msg, step)
-		}
-
-		positions := g.getPositions()
-		if err != nil {
-			g.log.Println("JSON marshal error:", err)
-			return
-		}
-
-		event := map[string]interface{}{
-			"type": "position_update",
-			"data": map[string]interface{}{
-				"positions": positions,
-			},
-		}
-		jsonData, err := json.Marshal(event)
-		if err != nil {
-			g.log.Println("JSON marshal error:", err)
-			return
-		}
-
-		g.broadcastMessage(jsonData)
-
+		p.NewInput(msg)
 	}
 }
 
-func (g *GameHandler) processMovement(p *player.Player, msg []byte, step int) {
-	if len(msg) > 1 {
-		key1 := rune(msg[0])
-		key2 := rune(msg[1])
-		normalizedStep := float64(step) * 0.707
-		p.MoveByKey(key1, normalizedStep)
-		p.MoveByKey(key2, normalizedStep)
-	} else {
-		p.MoveByKey(rune(msg[0]), float64(step))
+
+func (g* GameHandler) broadcastPositions() {
+	positions := g.getPositions()
+	if len(positions) == 0 {
+		return
 	}
+
+	event := map[string]interface{}{
+		"type": "position_update",
+		"data": map[string]interface{}{
+			"positions": positions,
+		},
+	}
+	jsonData, err := json.Marshal(event)
+	if err != nil {
+		g.log.Println("JSON marshal error:", err)
+		return
+	}
+
+	g.broadcastMessage(jsonData)
 }
 
-func (g *GameHandler) getPositions() map[int][2]float64{
-	g.playersMu.Lock()
+
+func (g *GameHandler) getPositions() map[int][2]float32{
+	g.playersMu.Lock() // Read lock only
 	defer g.playersMu.Unlock()
 
-	positions := make(map[int][2]float64)
+	var positions map[int][2]float32 // Don't pre-allocate
+
 	for id, player := range g.players {
-		if player != nil {
-			x, y := player.Position()
-			positions[id] = [2]float64{x, y}
+		if player == nil {
+			continue
 		}
+
+		if positions == nil {
+			positions = make(map[int][2]float32, len(g.players)/2) // Heuristic
+		}
+
+		x, y := player.PositionXY()
+		positions[id] = [2]float32{x, y}
 	}
 
-	return positions
-
+	return positions // May return nil
 }
+
+func (g *GameHandler) updatePositions() {
+	g.tokensMu.Lock()
+	defer g.tokensMu.Unlock()
+
+	for _, player := range g.players {
+		if player == nil {
+			continue
+		}
+		player.ApplySpeed()
+	}
+}
+
 
 func (g* GameHandler) broadcastMessage(bytes []byte) {
 	for _, player := range g.players {
@@ -323,7 +362,7 @@ func (g *GameHandler) StartTokenCleanup() {
 func (g *GameHandler) cleanupExpiredTokens() {
 	g.tokensMu.Lock()
 	defer g.tokensMu.Unlock()
-	
+
 	now := time.Now()
 	for token, pc := range g.pendingTokens {
 		if now.After(pc.Expires) {

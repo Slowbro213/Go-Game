@@ -4,49 +4,101 @@ import (
 	"github.com/gorilla/websocket"
 	"log"
 	"sync"
+	"time"
 )
 
-type Player struct {
-	ID   int
-	UserID string
-	X    float64
-	Y    float64
-	Conn *websocket.Conn 
-	log  *log.Logger
-	writeMu sync.Mutex
+type Vector struct {
+	X float32
+	Y float32
+}
 
-	movement map[rune]func(step float64)
+func (v *Vector) Add(other Vector) {
+	v.X += other.X
+	v.Y += other.Y
+}
+
+func (v *Vector) Scale(factor float32) Vector {
+	return Vector{
+		X: v.X * factor,
+		Y: v.Y * factor,
+	}
 }
 
 
 
-func NewPlayer(id int,userID string, x, y float64, conn *websocket.Conn,l *log.Logger) *Player {
+type Player struct {
+	ID         int
+	UserID     string
+	Position   Vector
+	Speed      Vector
+	lastUpdate time.Time // Track last update time
+	Conn       *websocket.Conn
+	log        *log.Logger
+	writeMu    sync.Mutex
+	pxps float32
+
+	movement map[rune]func()
+}
+
+
+func NewPlayer(id int, userID string, x, y,step float32, conn *websocket.Conn, l *log.Logger) *Player {
+	now := time.Now()
 	p := &Player{
-		ID:   id,
-		UserID: userID,
-		X:    x,
-		Y:    y,
-		Conn: conn,
-		log: l,
+		ID:         id,
+		UserID:     userID,
+		Position:   Vector{X: x, Y: y},
+		Conn:       conn,
+		log:        l,
+		lastUpdate: now,
+		pxps: step,
 	}
-	p.movement = map[rune]func(step float64){
-		'w': func(step float64) { p.Y -= step },
-		's': func(step float64) { p.Y += step },
-		'a': func(step float64) { p.X -= step },
-		'd': func(step float64) { p.X += step },
+	p.movement = map[rune]func(){
+		'w': func() { p.Speed.Y = -1 },
+		's': func() { p.Speed.Y = 1 },
+		'a': func() { p.Speed.X = -1 },
+		'd': func() { p.Speed.X = 1 },
 	}
 	return p
 }
 
 
-func (p *Player) MoveByKey(key rune, step float64) {
-	if moveFunc, ok := p.movement[key]; ok {
-		moveFunc(step)
+// Called to handle input and update speed vector
+func (p *Player) NewInput(inputs []byte) {
+
+	p.Speed.Y = 0
+	p.Speed.X = 0
+
+	sum := 0
+	for _ , input := range inputs {
+		key := rune(input)
+		if moveFunc, ok := p.movement[key]; ok {
+			moveFunc()
+			sum++
+		}
 	}
+
+	if sum > 1{
+		p.Speed.Y = p.Speed.Y * 0.7071
+		p.Speed.X = p.Speed.X * 0.7071
+	}
+
 }
 
-func (p *Player) Position() (float64,float64) {
-	return p.X, p.Y
+// Applies speed vector to the current position
+
+func (p *Player) ApplySpeed() {
+	now := time.Now()
+	delta := (now.Sub(p.lastUpdate).Seconds()) // delta in seconds
+	p.lastUpdate = now
+
+	scale := float32(delta) * p.pxps
+	move := p.Speed.Scale(scale)
+	p.Position.Add(move)
+}
+
+
+func (p *Player) PositionXY() (float32, float32) {
+	return p.Position.X, p.Position.Y
 }
 
 func (p *Player) Notify(bytes []byte) {
