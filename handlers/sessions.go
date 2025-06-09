@@ -81,8 +81,16 @@ func (s *SessionHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.log.Printf("Successful login from %s", r.RemoteAddr)
-	fmt.Fprintln(w, "Logged in successfully.")
+	utils.RenderMessage(w, utils.MessageData{
+		Type:     "success",
+		Title:    "Login Successful",
+		Message:  "You are now logged in",
+		Link:     "/",
+		LinkText: "Go to Game",
+
+	})
 }
+
 
 func (s *SessionHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	session, err := s.getSession(r)
@@ -104,7 +112,14 @@ func (s *SessionHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.log.Printf("Successful logout from %s", r.RemoteAddr)
-	fmt.Fprintln(w, "Logged out successfully.")
+	utils.RenderMessage(w, utils.MessageData{
+			Type:     "success",
+			Title:    "Logout Successful",
+			Message:  "You have Logged Out",
+			Link:     "/login",
+			LinkText: "Login",
+	
+		})
 }
 
 // Add this middleware to check session validity on protected routes

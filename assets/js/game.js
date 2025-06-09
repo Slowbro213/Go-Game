@@ -23,11 +23,11 @@ if (response.ok) {
   console.log(token);
   myID = player_id
 } else {
-  switch(response.status){
-    case 401: window.location.href = "/error/unauth"; break;
-    case 403: window.location.href = "/error/duplicate"; break;
-    case 503: window.location.href = "/error/max"; break;
-  }
+ // switch(response.status){
+ //   case 401: window.location.href = "/error/unauth"; break;
+ //   case 403: window.location.href = "/error/duplicate"; break;
+ //   case 503: window.location.href = "/error/max"; break;
+ // }
   throw new Error("Couldnt Join")
 }
 

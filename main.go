@@ -21,13 +21,13 @@ func main() {
 	//Static file serving
 	styles := http.FileServer(http.Dir("./assets/css"))
 	scripts := http.FileServer(http.Dir("./assets/js"))
-	views := http.FileServer(http.Dir("./views"))
+	errors := http.FileServer(http.Dir("./views/errors"))
 	http.Handle("/assets/css/", http.StripPrefix("/assets/css/", styles))
 	http.Handle("/assets/js/", http.StripPrefix("/assets/js/", scripts))
 	http.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w,r,"./assets/icons8-spartan-helmet-16.png")
 	})
-	http.Handle("/",http.StripPrefix("/",views))
+	http.Handle("/error",http.StripPrefix("/",errors))
 
 
 
@@ -78,6 +78,16 @@ func main() {
 		authService.AuthMiddleware(),
 		middleware.Method("GET"),
 		))
+
+	http.HandleFunc("/", middleware.Chain(
+		func(w http.ResponseWriter, r *http.Request) {
+			http.ServeFile(w,r,"./views/index.html")
+		},
+		middleware.Logging(),
+		authService.AuthMiddleware(),
+		middleware.Method("GET"),
+		))
+
 	//Server Start
 	fmt.Println("Server running at http://localhost:8080/")
 	http.ListenAndServe("0.0.0.0:8080", nil)

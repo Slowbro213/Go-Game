@@ -9,6 +9,9 @@ import (
 	"net/http"
 
 	"github.com/gorilla/sessions"
+
+
+	"gametry.com/utils"
 )
 
 // AuthService handles authentication middleware
@@ -47,13 +50,29 @@ func (a *AuthService) AuthMiddleware() Middleware {
 			if !result.Authenticated {
 				if result.Error != nil {
 					a.log.Printf("Unauthenticated request: %v", result.Error)
-					http.Error(w, "Please login first", http.StatusUnauthorized)
+					utils.RenderMessage(w, utils.MessageData{
+
+						Type:     "error",
+						Title:    "Unauthorized",
+						Message:  "You need to login first",
+						Link:     "/login",
+						LinkText: "Login",
+
+					})
+					http.Error(w, "", http.StatusUnauthorized)
 					return
 				}
 
 				a.log.Printf("Authentication failed: %v", result.Error)
-				http.ServeFile(w,r,"../views/errors/duplicate.html")
-				http.Error(w, "Forbidden", http.StatusForbidden)
+					utils.RenderMessage(w, utils.MessageData{
+
+						Type:     "error",
+						Title:    "Duplicates are Forbidden",
+						Message:  "You cannot play from multiple tabs",
+						Link:     "/logout",
+						LinkText: "Logout",
+					})
+				http.Error(w, "", http.StatusForbidden)
 				return
 			}
 
