@@ -5,15 +5,12 @@ import (
 	"fmt"
 	"net/http"
 	"log"
-	"github.com/gorilla/websocket"
 	"gametry.com/handlers"
 	"gametry.com/middleware"
 	"github.com/gorilla/sessions"
 	"os"
 )
 
-var upgrader = websocket.Upgrader{
-}
 
 
 func main() {
@@ -61,7 +58,7 @@ func main() {
 
 	//Game WebSocket Service
 	l = log.New(os.Stdout, "GameHandler: ", log.LstdFlags)
-	gh := handlers.NewGameHandler(l,&upgrader,store)
+	gh := handlers.NewGameHandler(l,store)
 	http.HandleFunc("/game", middleware.Chain(
 		gh.Match,
 		middleware.Logging(),
