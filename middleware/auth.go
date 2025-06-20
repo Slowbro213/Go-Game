@@ -11,7 +11,7 @@ import (
 	"github.com/gorilla/sessions"
 
 
-	"gametry.com/utils"
+	"game/utils"
 )
 
 // AuthService handles authentication middleware

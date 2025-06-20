@@ -5,7 +5,7 @@ import (
 	"log"
 	"sync"
 
-	"gametry.com/core"
+	"game/core"
 )
 
 type Player struct {

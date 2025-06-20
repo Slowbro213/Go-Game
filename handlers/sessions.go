@@ -7,7 +7,7 @@ import (
 	"time"
 
 
-	"gametry.com/utils"
+	"game/utils"
 
 	"github.com/gorilla/sessions"
 )

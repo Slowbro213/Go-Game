@@ -7,8 +7,8 @@ import (
 	"encoding/json"
 	"bytes"
 
-	"gametry.com/core" 
-	"gametry.com/player"
+	"game/core" 
+	"game/player"
 )
 
 type PositionUpdateMessage struct {

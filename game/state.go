@@ -3,8 +3,8 @@ package game
 
 import (
 
-	"gametry.com/core"
-	"gametry.com/player"
+	"game/core"
+	"game/player"
 )
 
 

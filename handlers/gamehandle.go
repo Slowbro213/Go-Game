@@ -10,11 +10,11 @@ import (
 	"time"
 	"html/template"
 
-	"gametry.com/middleware"
-	"gametry.com/player"     
-	"gametry.com/utils"      
-	"gametry.com/game"
-	"gametry.com/core"
+	"game/middleware"
+	"game/player"     
+	"game/utils"      
+	"game/game"
+	"game/core"
 
 	"github.com/gorilla/sessions"
 	"github.com/gorilla/websocket"

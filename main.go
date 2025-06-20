@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"log"
-	"gametry.com/handlers"
-	"gametry.com/middleware"
+	"game/handlers"
+	"game/middleware"
 	"github.com/gorilla/sessions"
 	"os"
 )
