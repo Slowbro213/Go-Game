@@ -7,30 +7,18 @@ import { HandleEvent } from './eventhandler.js';
 const game_container = document.getElementById("game-container");
 const log = document.getElementById("log");
 
+console.log(window.GAMESTATE);
+
+const gameState = JSON.parse(window.GAMESTATE);
+
+
 
 
 const players = new Map();
-let myID = null;
 
-const response = await fetch('/game/join');
-let player_id = null;
-let token = null;
-if (response.ok) {
-  const data = await response.json();
-  player_id = data.player_id;
-  token = data.token;
-  console.log(player_id);
-  console.log(token);
-  myID = player_id
-} else {
- // switch(response.status){
- //   case 401: window.location.href = "/error/unauth"; break;
- //   case 403: window.location.href = "/error/duplicate"; break;
- //   case 503: window.location.href = "/error/max"; break;
- // }
-  throw new Error("Couldnt Join")
-}
-
+let player_id = window.PLAYERID;
+let token = window.TOKEN;
+const myID = Number(player_id);
 
 
 setupInput();
@@ -44,6 +32,7 @@ setupSocket( token ,
   },
   () => {
     log.textContent += "Status: Connected\n";
+    log.textContent += `${myID} ${token}`;
 
     const newPlayer = document.createElement('div');
     newPlayer.id="character" + myID;

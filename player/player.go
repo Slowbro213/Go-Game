@@ -9,8 +9,8 @@ import (
 )
 
 type Player struct {
-	id          int
-	UserID      string
+	Id          int
+	userID      string
 	Position    core.Point
 	VelocityVec core.Vector
 	conn        *websocket.Conn
@@ -18,29 +18,40 @@ type Player struct {
 	writeMu     sync.Mutex
 	pxps        float32
 
+	children map[int]core.GameObject
+
 
 }
 
 func NewPlayer(id int, userID string, x, y, pxps float32, conn *websocket.Conn, l *log.Logger) *Player {
 	p := &Player{
-		id:          id,
-		UserID:      userID,
+		Id:          id,
+		userID:      userID,
 		Position:    core.Point{X: x, Y: y},
 		VelocityVec: core.Vector{VX: 0, VY: 0},
 		conn:        conn,
 		log:         l,
 		pxps:        pxps,
+
+		children: nil,
 	}
 	return p
 }
 
-func (p *Player) ID() int {
-	return p.id
+func (p *Player) UserID() string {
+	return p.userID
 }
 
+func (p *Player) ID() int {
+	return p.Id
+}
+
+func (p *Player) State() string {
+	return "Happy"
+}
 
 func (p *Player) Children() map[int]core.GameObject {
-	return nil
+	return p.children
 }
 
 func (p *Player) OnTick(delta float64) {
@@ -81,6 +92,10 @@ func (p *Player) Conn() *websocket.Conn {
 
 func (p *Player) CloseConn() {
 	p.conn.Close()
+}
+
+func(p *Player) SetConn(c *websocket.Conn) {
+	p.conn = c
 }
 
 func (p *Player) Notify(bytes []byte) {

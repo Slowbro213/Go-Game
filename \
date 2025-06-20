@@ -10,21 +10,21 @@ import (
 	"time"
 	"html/template"
 
-	"gametry.com/middleware"
-	"gametry.com/player"     
-	"gametry.com/utils"      
-	"gametry.com/game"
-	"gametry.com/core"
+	"gametry.com/middleware" // Assuming your middleware is here
+	"gametry.com/player"     // Player type
+	"gametry.com/utils"      // Utility functions
+	"gametry.com/core"      // Utility functions
+
+
+	"gametry.com/game" // NEW: Import your game package
 
 	"github.com/gorilla/sessions"
 	"github.com/gorilla/websocket"
 )
 
-
-type TemplateData struct {
-	GameState template.JS
-	PlayerID  int 
-	Token     string
+//Should probably be defined somewhere else and in a more dynamic manner
+type GamePageData struct {
+	GameState []byte
 }
 
 type PendingConnection struct {
@@ -60,17 +60,8 @@ func NewGameHandler(l *log.Logger, s *sessions.CookieStore) *GameHandler {
 		pendingTokens: make(map[string]*PendingConnection),
 	}
 
-	base := core.State{
-		Objects:   make(map[int]core.GameObject),
-		Entities:  make(map[int]core.Entity),
-	}
 
-	gameState := game.State{
-		Base: &base,
-		Players: make(map[string]*player.Player),
-	}
-
-	handler.game = game.NewGame(&gameState,fixedTPS, targetFPS, maxPlayers ,l)
+	handler.game = game.NewGame(fixedTPS, targetFPS, maxPlayers ,l)
 
 	handler.game.BroadcastFunc = handler.broadcastMessage
 
@@ -119,23 +110,18 @@ func (g *GameHandler) Join(w http.ResponseWriter, r *http.Request) {
 	}
 
 	g.tokensMu.Unlock()
-
-
-	playerLogger := log.New(os.Stdout, fmt.Sprintf("Player %d [%s]: ", slot, userID), log.LstdFlags)
-	p := player.NewPlayer(slot, userID, 0, 0, playerBasePxPs, nil, playerLogger)
-	
-	g.game.AddPlayer(p) 
-
-	jsonBytes, err := json.Marshal(g.game.State.Base)
-
-	if err != nil {
-		panic(err)
+	gameState := map[string]interface{}{
+		"player_id": slot ,
+		"token": token,
+		"game_state": map[string]interface{}{
+			"test": "hello!",
+		},
 	}
 
-	templateData := TemplateData{
-		GameState: template.JS(jsonBytes),
-		PlayerID: slot,
-		Token: token,
+	jsonBytes, _ := json.Marshal(gameState)
+
+	data := GamePageData{
+		GameState: jsonBytes,
 	}
 
 	tmpl, err := template.ParseFiles("views/index.html")
@@ -144,7 +130,7 @@ func (g *GameHandler) Join(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = tmpl.Execute(w, templateData)
+	err = tmpl.Execute(w, data)
 	if err != nil {
 		utils.RenderMessage(w, utils.MessageData{
 			Type: "error",
@@ -184,12 +170,12 @@ func (g *GameHandler) Match(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p := g.game.State.Players[userID]
+	playerLogger := log.New(os.Stdout, fmt.Sprintf("Player %d [%s]: ", pending.PlayerID, userID), log.LstdFlags)
+	p := player.NewPlayer(pending.PlayerID, userID, 0, 0, playerBasePxPs, conn, playerLogger)
 
-	p.SetConn(conn)
+	g.game.AddPlayer(p) 
 
-
-	g.log.Println("User Joined:", p.ID(), "UserID:", p.UserID())
+	g.log.Println("User Joined:", p.ID(), "UserID:", p.UserID)
 
 	g.handlePlayerConnection(p)
 }
@@ -197,7 +183,7 @@ func (g *GameHandler) Match(w http.ResponseWriter, r *http.Request) {
 func (g *GameHandler) handlePlayerConnection(p *player.Player) {
 	defer func() {
 		g.game.RemovePlayer(p) 
-		g.log.Println("User Left:", p.ID(), "UserID:", p.UserID())
+		g.log.Println("User Left:", p.ID(), "UserID:", p.UserID)
 		p.Conn().Close()
 	}()
 
@@ -223,8 +209,8 @@ func (g *GameHandler) handlePlayerConnection(p *player.Player) {
 
 func (g *GameHandler) broadcastMessage(bytes []byte) {
 
-	for _, p := range g.game.State.Players {
-		if p != nil && p.Conn() != nil {
+	for _, p := range g.game.OnlinePlayers {
+		if p != nil {
 			p.Notify(bytes)
 		}
 	}

@@ -23,7 +23,9 @@ type PositionUpdateData struct {
 type Game struct {
 	Engine core.Engine
 
-	OnlinePlayers map[string]*player.Player
+	maxPlayers 		int
+	nextID        int
+	State         *State
 	PlayerIDs     map[int]string            
 	PlayersMu     sync.RWMutex              
 
@@ -40,9 +42,11 @@ type Game struct {
 	BroadcastFunc func([]byte)
 }
 
-func NewGame(fixedTPS float64, l *log.Logger) *Game {
+func NewGame(state *State,fixedTPS float64, targetFPS, maxPlayers int, l *log.Logger) *Game {
 	g := &Game{
-		OnlinePlayers: make(map[string]*player.Player),
+		State:         state,
+		maxPlayers:    maxPlayers,
+		nextID:        0,
 		PlayerIDs:     make(map[int]string),
 		log:           l,
 		CurrentPositions : make(map[int][2]float32),
@@ -54,7 +58,7 @@ func NewGame(fixedTPS float64, l *log.Logger) *Game {
 		jsonBuffer: bytes.NewBuffer(make([]byte, 0, 2048)),
 	}
 	g.jsonEncoder = json.NewEncoder(g.jsonBuffer)
-	g.Engine = *core.NewEngine(fixedTPS)
+	g.Engine = *core.NewEngine(state.Base,fixedTPS,targetFPS)
 
 	g.Engine.OnFixedUpdate = g.OnFixedUpdate
 	g.Engine.OnVariableUpdate = g.OnVariableUpdate
@@ -70,30 +74,74 @@ func (g *Game) Shutdown() {
 	g.Engine.Shutdown()
 }
 
+func (g *Game) ReserveSpot() (int, bool) {
+	slot, found := -1, false
+	for i := 0; i < g.maxPlayers; i++ {
+		if _, ok := g.PlayerIDs[g.nextID]; !ok { 
+			slot = g.nextID
+			found = true
+			g.nextID = (g.nextID + 1) % g.maxPlayers 
+			break
+		}
+		g.nextID = (g.nextID + 1) % g.maxPlayers
+	}
+
+	return slot, found
+}
+
 func (g *Game) AddPlayer(p *player.Player) {
 	g.PlayersMu.Lock()
 	defer g.PlayersMu.Unlock()
 
-	g.OnlinePlayers[p.UserID] = p
-	g.PlayerIDs[p.ID()] = p.UserID
+	g.State.Players[p.UserID()] = p
+	g.PlayerIDs[p.ID()] = p.UserID()
 
 	g.Engine.AddObject(p) 
+
+	joinMsg := map[string]interface{}{
+		"type": "player_joined",
+		"data": map[string]interface{}{
+			"id":       p.ID(),
+		},
+	}
+	jsonBytes, err := json.Marshal(joinMsg)
+	if err != nil {
+		g.log.Println("JSON marshal error:", err)
+	} else {
+		g.BroadcastFunc(jsonBytes)
+	}
+
 }
 
 func (g *Game) RemovePlayer(p *player.Player) {
 	g.PlayersMu.Lock()
 	defer g.PlayersMu.Unlock()
 
-	delete(g.OnlinePlayers, p.UserID)
+	delete(g.State.Players, p.UserID())
 	delete(g.PlayerIDs, p.ID())
 
 	g.Engine.RemoveObject(p.ID()) 
+
+	leaveMsg := map[string]interface{}{
+		"type": "player_left",
+		"data": map[string]interface{}{
+			"id":     p.ID(),
+			"userID": p.UserID(),
+		},
+	}
+	jsonBytes, err := json.Marshal(leaveMsg)
+	if err != nil {
+		g.log.Println("JSON marshal error:", err)
+	} else {
+		g.BroadcastFunc(jsonBytes)
+	}
+
 }
 
 func (g *Game) GetPlayerByUserID(userID string) *player.Player {
 	g.PlayersMu.RLock()
 	defer g.PlayersMu.RUnlock()
-	return g.OnlinePlayers[userID]
+	return g.State.Players[userID]
 }
 
 func (g *Game) GetPlayerByID(playerID int) *player.Player {
@@ -103,7 +151,7 @@ func (g *Game) GetPlayerByID(playerID int) *player.Player {
     if !exists {
         return nil
     }
-    return g.OnlinePlayers[userID]
+    return g.State.Players[userID]
 }
 
 func (g *Game) OnFixedUpdate(delta float64) {
@@ -111,15 +159,16 @@ func (g *Game) OnFixedUpdate(delta float64) {
 		delete(g.CurrentPositions, k)
 	}
 
+
 	g.PlayersMu.RLock()
-	if len(g.OnlinePlayers) == 0 {
+	if len(g.State.Players) == 0 {
 		g.PlayersMu.RUnlock()
 		for k := range g.PrevPositions {
 			delete(g.PrevPositions, k)
 		}
 		return
 	}
-	for _, p := range g.OnlinePlayers {
+	for _, p := range g.State.Players {
 		if p != nil {
 			pos := p.PositionXY()
 			g.CurrentPositions[p.ID()] = [2]float32{pos.X, pos.Y}
@@ -180,6 +229,7 @@ func (g *Game) OnFixedUpdate(delta float64) {
 	for id, pos := range g.CurrentPositions {
 		g.PrevPositions[id] = pos
 	}
+
 }
 
 

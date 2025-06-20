@@ -54,5 +54,4 @@ export function HandleEvent(e,players,game_container){
   const data = e.data;
 
   eventsMap.get(type)(data,players,game_container);
-
 }

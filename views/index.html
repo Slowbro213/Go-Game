@@ -10,5 +10,12 @@
     <pre id="log"></pre>
   </body>
 
+  <!-- Values from Backend -->
+  <script>
+    window.GAMESTATE = "{{.GameState}}";
+    window.PLAYERID  = "{{.PlayerID}}";
+    window.TOKEN     = "{{.Token}}";
+  </script>
+
   <script type="module" src="assets/js/game.js"></script>
 </html>

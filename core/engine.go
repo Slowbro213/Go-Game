@@ -7,14 +7,13 @@ import (
 )
 
 type Engine struct {
-	Objects   map[int]GameObject
-	objectsMu sync.RWMutex
-
-	Entities   map[int]Entity
-	entitiesMu sync.RWMutex
+	
+	State     *State
+	stateMu   sync.RWMutex
 
 	tickInterval   time.Duration
 	fixedTickDelta float64
+	targetFPS int
 
 	done chan struct{}
 	wg   sync.WaitGroup
@@ -25,24 +24,16 @@ type Engine struct {
 	eventQueue chan *Event
 }
 
-func NewEngine(fixedTPS float64, objects ...GameObject) *Engine {
+func NewEngine(state *State,fixedTPS float64, targetFPS int) *Engine {
 	tickInterval := time.Duration(int(math.Round(1000.0/fixedTPS))) * time.Millisecond
 
 	engine := &Engine{
-		Objects:        make(map[int]GameObject),
-		Entities:       make(map[int]Entity),
+		State:          state,
 		tickInterval:   tickInterval,
 		fixedTickDelta: tickInterval.Seconds(),
+		targetFPS:      targetFPS,
 		done:           make(chan struct{}),
 		eventQueue:     make(chan *Event, 1000),
-	}
-
-
-	for _, obj := range objects {
-		engine.Objects[obj.ID()] = obj
-		if ent, ok := obj.(Entity); ok { 
-			engine.Entities[obj.ID()] = ent
-		}
 	}
 
 
@@ -76,11 +67,11 @@ func (e *Engine) runFixedUpdateLoop() {
 		select {
 		case <-ticker.C:
 
-			e.entitiesMu.Lock() 
-			for _, ent := range e.Entities { 
+			e.stateMu.Lock() 
+			for _, ent := range e.State.Entities { 
 				ent.OnTick(e.fixedTickDelta)
 			}
-			e.entitiesMu.Unlock()
+			e.stateMu.Unlock()
 
 			if e.OnFixedUpdate != nil {
 				e.OnFixedUpdate(e.fixedTickDelta)
@@ -91,55 +82,73 @@ func (e *Engine) runFixedUpdateLoop() {
 	}
 }
 
+
 func (e *Engine) runVariableUpdateLoop() {
+	targetFrameDuration := time.Second / time.Duration(e.targetFPS)
+
 	lastFrameTime := time.Now()
+
 	for {
 		select {
 		case <-e.done:
 			return
 		default:
 			now := time.Now()
-			variableDelta := now.Sub(lastFrameTime).Seconds()
+			delta := now.Sub(lastFrameTime).Seconds()
 			lastFrameTime = now
 
-			e.entitiesMu.RLock()
-			for _, ent := range e.Entities {
-				ent.OnFrame(variableDelta)
+			e.stateMu.RLock()
+			for _, ent := range e.State.Entities {
+				ent.OnFrame(delta)
 			}
-			e.entitiesMu.RUnlock()
+			e.stateMu.RUnlock()
 
 			if e.OnVariableUpdate != nil {
-				e.OnVariableUpdate(variableDelta)
+				e.OnVariableUpdate(delta)
 			}
 
-			time.Sleep(time.Millisecond)
+			// Sleep to maintain target frame rate
+			frameElapsed := time.Since(now)
+			sleepDuration := targetFrameDuration - frameElapsed
+			if sleepDuration > 0 {
+				time.Sleep(sleepDuration)
+			}
 		}
 	}
 }
 
+
+
 func (e *Engine) eventConsumer() {
-    for {
-        select {
-        case ev, ok := <-e.eventQueue:
-            if !ok {
-                return
-            }
-            e.objectsMu.Lock()
-            for objID, effects := range ev.Effects {
-                obj := e.Objects[objID]
-                if obj == nil {
-                    continue
-                }
-                for _, effect := range effects {
-                    effect.Apply(obj)
-                }
-            }
-            e.objectsMu.Unlock()
-        case <-e.done:
-            return
-        }
-    }
+	for {
+		select {
+		case ev, ok := <-e.eventQueue:
+			if !ok {
+				return
+			}
+			e.stateMu.Lock()
+			for objID, effects := range ev.Effects {
+				var obj GameObject
+
+				if o := e.State.Objects[objID]; o != nil {
+					obj = o
+				} else if o := e.State.Entities[objID]; o != nil {
+					obj = o
+				} else {
+					continue
+				}
+
+				for _, effect := range effects {
+					effect.Apply(obj)
+				}
+			}
+			e.stateMu.Unlock()
+		case <-e.done:
+			return
+		}
+	}
 }
+
 
 
 
@@ -158,31 +167,30 @@ func (e *Engine) Shutdown() {
 
 
 func (e *Engine) AddObject(obj GameObject) {
-    e.objectsMu.Lock()
-    e.Objects[obj.ID()] = obj
-    e.objectsMu.Unlock() 
+	e.stateMu.Lock()
+	defer e.stateMu.Unlock() 
 
-    if ent, ok := obj.(Entity); ok {
-        e.entitiesMu.Lock() 
-        e.Entities[obj.ID()] = ent
-        e.entitiesMu.Unlock()
-    }
+	if ent, ok := obj.(Entity); ok {
+		e.State.Entities[obj.ID()] = ent
+	}else{
+		e.State.Objects[obj.ID()] = obj
+	}
 }
 
 func (e *Engine) RemoveObject(id int) {
-    e.objectsMu.Lock()
-    delete(e.Objects, id)
-    e.objectsMu.Unlock()
+    e.stateMu.Lock()
+    delete(e.State.Objects, id)
+    e.stateMu.Unlock()
 
-    e.entitiesMu.Lock()
-    delete(e.Entities, id) 
-    e.entitiesMu.Unlock()
+    e.stateMu.Lock()
+    delete(e.State.Entities, id) 
+    e.stateMu.Unlock()
 }
 
 
 func (e *Engine) GetObject(id int) GameObject {
-    e.objectsMu.RLock()
-    obj := e.Objects[id]
-    e.objectsMu.RUnlock()
+    e.stateMu.RLock()
+    obj := e.State.Objects[id]
+    e.stateMu.RUnlock()
     return obj
 }

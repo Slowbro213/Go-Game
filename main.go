@@ -69,21 +69,14 @@ func main() {
 
 
 
-	http.HandleFunc("/game/join", middleware.Chain(
+
+	http.HandleFunc("/", middleware.Chain(
 		gh.Join,
 		middleware.Logging(),
 		authService.AuthMiddleware(),
 		middleware.Method("GET"),
 		))
 
-	http.HandleFunc("/", middleware.Chain(
-		func(w http.ResponseWriter, r *http.Request) {
-			http.ServeFile(w,r,"./views/index.html")
-		},
-		middleware.Logging(),
-		authService.AuthMiddleware(),
-		middleware.Method("GET"),
-		))
 
 	//Server Start
 	fmt.Println("Server running at http://localhost:8080/")
