@@ -17,7 +17,7 @@ func NewObject(id int,children map[int]GameObject) *Object {
 		id:  id,
 		children: children,
 		dirty: false,
-		Typed:   Typed{ Type: "Object"},
+		Typed:   Typed{ Type: TypeObject},
 	}
 }
 
@@ -75,14 +75,15 @@ func (o *Object) ToDeltaBytes(buf []byte, start int) int {
 
 
 func (o *Object) Size() int {
-	return 4 + len(o.Type) 
+	return 4 + 1
 }
 
 
 //Helpers
-func writeIDAndType(buf []byte, start int, id int, objType string) int {
+func writeIDAndType(buf []byte, start int, id int, objType ObjectType) int {
 	binary.LittleEndian.PutUint32(buf[start:start+4], uint32(id))
-	copy(buf[start+4:], objType)
-	return 4 + len(objType)
+	buf[start+4] = byte(objType)
+	return 5 // 4 bytes ID + 1 byte type
 }
+
 

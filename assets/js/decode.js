@@ -1,5 +1,7 @@
 //Deprecated!!!
 //decode.js
+const decoder = new TextDecoder()
+
 export function decode(buf) {
   const view = new DataView(buf);
   let offset = 0;
@@ -12,33 +14,27 @@ export function decode(buf) {
   const messageType = new TextDecoder().decode(typeBytes);
   offset += typeLen;
 
-  // Step 2: Decode all Concrete objects from the remaining buffer
-  const objects = [];
+  const TYPE_MAP = ["character", "enemy", "item"]; // Update to match your enum
 
+  const objects = [];
   while (offset < buf.byteLength) {
-    // ID: 4 bytes
     const id = view.getUint32(offset, true);
     offset += 4;
 
-    // Game object type string: assume fixed (e.g. "character")
-    const objTypeLen = "character".length;
-    const objTypeBytes = new Uint8Array(buf, offset, objTypeLen);
-    const objType = new TextDecoder().decode(objTypeBytes);
-    offset += objTypeLen;
+    const typeCode = view.getUint8(offset);
+    offset += 1;
 
-    // Position.X: 4 bytes
-    const posX = view.getFloat32(offset, true);
+    const x = view.getFloat32(offset, true);
     offset += 4;
 
-    // Position.Y: 4 bytes
-    const posY = view.getFloat32(offset, true);
+    const y = view.getFloat32(offset, true);
     offset += 4;
-
 
     objects.push({
       id,
-      type: objType,
-      position: { x: posX, y: posY }
+      type: TYPE_MAP[typeCode] || "unknown",
+      position: { x, y },
+      children: []
     });
   }
 
@@ -47,3 +43,4 @@ export function decode(buf) {
     data: objects
   };
 }
+

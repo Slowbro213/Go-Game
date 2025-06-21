@@ -28,7 +28,7 @@ func NewPlayer(id int, userID string, x, y, pxps float32, conn *websocket.Conn, 
 		Concrete:    *core.NewConcreteObject(id,nil,core.Point{X:x, Y:y}),
 
 	}
-	p.SetType("character")
+	p.SetType(core.TypePlayer)
 	return p
 }
 

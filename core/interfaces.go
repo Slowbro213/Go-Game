@@ -4,15 +4,23 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+type ObjectType uint8
+
+const (
+	TypeObject ObjectType = iota
+	TypeConcreteObject
+	TypePlayer
+)
+
 type Typed struct {
-	Type string	
+	Type 	ObjectType
 }
 
-func (ty *Typed) SetType(t string){
+func (ty *Typed) SetType(t ObjectType){
 	ty.Type = t
 }
 
-func (ty *Typed) GetType() string{
+func (ty *Typed) GetType() ObjectType{
 	return ty.Type
 }
 

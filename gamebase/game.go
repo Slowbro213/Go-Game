@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"encoding/binary"
 	"bytes"
+	"fmt"
 	//"maps"
 
 	"game/core" 
@@ -113,6 +114,8 @@ func (g *Game) AddPlayer(p *player.Player) {
 	}
 }
 
+
+
 func (g *Game) RemovePlayer(p *player.Player) {
 	g.PlayersMu.Lock()
 	defer g.PlayersMu.Unlock()
@@ -120,23 +123,31 @@ func (g *Game) RemovePlayer(p *player.Player) {
 	delete(g.State.Players, p.UserID())
 	delete(g.PlayerIDs, p.ID())
 
-	g.Engine.RemoveObject(p.ID()) 
+	g.Engine.RemoveObject(p.ID())
 
-	leaveMsg := map[string]any{
-		"type": "player_left",
-		"data": map[string]any{
-			"id":     p.ID(),
-			"userID": p.UserID(),
-		},
-	}
-	jsonBytes, err := json.Marshal(leaveMsg)
-	if err != nil {
-		g.log.Println("JSON marshal error:", err)
-	} else {
-		g.BroadcastFunc(jsonBytes)
-	}
+	// --- Build binary message ---
+	msgType := "player_left"
+	msgTypeBytes := []byte(msgType)
+	msgTypeLen := uint32(len(msgTypeBytes))
 
+	payloadSize := p.Size()
+	totalSize := 4 + len(msgTypeBytes) + payloadSize
+
+	buf := make([]byte, totalSize)
+
+	// Header: [4 bytes msgLen][msgType]
+	binary.LittleEndian.PutUint32(buf[0:4], msgTypeLen)
+	copy(buf[4:4+len(msgTypeBytes)], msgTypeBytes)
+
+	// Payload: player info
+	offset := 4 + len(msgTypeBytes)
+	p.ToBytes(buf, offset)
+
+	if g.BroadcastFunc != nil {
+		g.BroadcastFunc(buf)
+	}
 }
+
 
 func (g *Game) GetPlayerByUserID(userID string) *player.Player {
 	g.PlayersMu.RLock()
@@ -200,7 +211,9 @@ func (g *Game) OnFixedUpdate(delta float64) {
 		offset += conc.ToDeltaBytes(buf, offset)
 	}
 
+
 	if g.BroadcastFunc != nil && offset > initOffset {
+		g.log.Println(fmt.Sprintf("SENDING [%d bytes]: % x\n", offset, buf[:offset]))
 		g.BroadcastFunc(buf[:offset])
 	}
 

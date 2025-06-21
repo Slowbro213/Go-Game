@@ -3,6 +3,7 @@ import { createAnimator } from './animation.js';
 const eventsMap = new Map();
 
 function PlayerLeft(data,players,game_container){
+  data = data[0];
   players.delete(data.id);
 
   const leavingPlayer = document.getElementById(`character${data.id}`);
@@ -68,5 +69,9 @@ export function HandleEvent(e,players,game_container){
   const type = e.type;
   const data = e.data;
 
+  if(type != "position_update"){
+    console.log(type);
+    console.log(data);
+  }
   eventsMap.get(type)(data,players,game_container);
 }

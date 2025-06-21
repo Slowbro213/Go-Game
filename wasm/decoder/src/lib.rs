@@ -1,69 +1,72 @@
 // src/lib.rs
-
 use wasm_bindgen::prelude::*;
-use js_sys::{Uint8Array, Uint32Array, Float32Array};
-use std::convert::TryInto;
+use js_sys::{Uint32Array, Float32Array, Uint8Array, Object, Reflect};
 
+fn read_u32(buf: &[u8], off: &mut usize) -> Result<u32, JsValue> {
+    if *off + 4 > buf.len() {
+        return Err(JsValue::from_str(&format!("oob u32 at {}", *off)));
+    }
+    let v = u32::from_le_bytes(buf[*off..*off + 4].try_into().unwrap());
+    *off += 4;
+    Ok(v)
+}
+
+fn read_f32(buf: &[u8], off: &mut usize) -> Result<f32, JsValue> {
+    if *off + 4 > buf.len() {
+        return Err(JsValue::from_str(&format!("oob f32 at {}", *off)));
+    }
+    let v = f32::from_le_bytes(buf[*off..*off + 4].try_into().unwrap());
+    *off += 4;
+    Ok(v)
+}
+
+/// decode to { type, ids, xs, ys, typeCodes }
 #[wasm_bindgen]
-pub fn decode(data: &[u8]) -> Result<JsValue, JsValue> {
-    // total buffer length
-    let total = data.len();
-    let mut offset = 0;
+pub fn decode(buf: &[u8]) -> Result<JsValue, JsValue> {
+    let mut off = 0;
+    let total = buf.len();
 
-    // ——— 1) read msg_type length (u32 LE) —————————————
-    if total < 4 {
-        return Err(JsValue::from_str("Buffer too small for msg_type length"));
+    // 1. top-level message type
+    let type_len = read_u32(buf, &mut off)? as usize;
+    if off + type_len > total {
+        return Err(JsValue::from_str("oob msg type"));
     }
-    let type_len = u32::from_le_bytes(data[0..4].try_into().unwrap()) as usize;
-    offset += 4;
+    let msg_type = std::str::from_utf8(&buf[off..off + type_len])
+        .map_err(|_| JsValue::from_str("bad utf8 in msg type"))?;
+    off += type_len;
 
-    // ——— 2) read msg_type string ———————————————————————
-    if offset + type_len > total {
-        return Err(JsValue::from_str("msg_type length exceeds buffer"));
-    }
-    let msg_type = std::str::from_utf8(&data[offset..offset + type_len])
-        .map_err(|e| JsValue::from_str(&format!("Invalid UTF-8: {}", e)))?
-        .to_string();
-    offset += type_len;
-
-    // ——— 3) parse objects into three primitive Vecs ————————
-    // you always used "character".len() == 9
-    const OBJ_TYPE_LEN: usize = 9;
+    // 2. object loop
     let mut ids = Vec::new();
-    let mut xs  = Vec::new();
-    let mut ys  = Vec::new();
+    let mut xs = Vec::new();
+    let mut ys = Vec::new();
+    let mut type_codes = Vec::new();
 
-    // each object in your old format was: 4(id)+9(type)+4(x)+4(y) bytes
-    while offset + 4 + OBJ_TYPE_LEN + 8 <= total {
-        // read id
-        let id = u32::from_le_bytes(data[offset..offset+4].try_into().unwrap());
-        offset += 4;
+    while off < total {
+        // ID
+        ids.push(read_u32(buf, &mut off)?);
 
-        // skip the 9-byte "character"
-        offset += OBJ_TYPE_LEN;
+        type_codes.push(buf[off]);
+        log(type_codes.)
+        off += 1;
 
-        // read x,y
-        let x = f32::from_le_bytes(data[offset..offset+4].try_into().unwrap());
-        offset += 4;
-        let y = f32::from_le_bytes(data[offset..offset+4].try_into().unwrap());
-        offset += 4;
-
-        ids.push(id);
-        xs.push(x);
-        ys.push(y);
+        // X, Y
+        xs.push(read_f32(buf, &mut off)?);
+        ys.push(read_f32(buf, &mut off)?);
     }
 
-    // ——— 4) build JS TypedArrays in one go each ——————————
-    let ids_array = Uint32Array::from(ids.as_slice());
-    let xs_array  = Float32Array::from(xs.as_slice());
-    let ys_array  = Float32Array::from(ys.as_slice());
+    // 3. views
+    let ids_arr = unsafe { Uint32Array::view(&ids) };
+    let xs_arr = unsafe { Float32Array::view(&xs) };
+    let ys_arr = unsafe { Float32Array::view(&ys) };
+    let types_arr = unsafe { Uint8Array::view(&type_codes) };
 
-    // ——— 5) package up a JS object: { type, ids, xs, ys } ————
-    let result = js_sys::Object::new();
-    js_sys::Reflect::set(&result, &"type".into(), &msg_type.into())?;
-    js_sys::Reflect::set(&result, &"ids".into(), &JsValue::from(ids_array))?;
-    js_sys::Reflect::set(&result, &"xs".into(), &JsValue::from(xs_array))?;
-    js_sys::Reflect::set(&result, &"ys".into(), &JsValue::from(ys_array))?;
+    // 4. return object
+    let out = Object::new();
+    Reflect::set(&out, &"type".into(), &msg_type.into())?;
+    Reflect::set(&out, &"ids".into(), &ids_arr.into())?;
+    Reflect::set(&out, &"xs".into(), &xs_arr.into())?;
+    Reflect::set(&out, &"ys".into(), &ys_arr.into())?;
+    Reflect::set(&out, &"typeCodes".into(), &types_arr.into())?;
 
-    Ok(JsValue::from(result))
+    Ok(out.into())
 }
