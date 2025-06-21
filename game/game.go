@@ -6,34 +6,42 @@ import (
 	"time"
 	"encoding/json"
 	"bytes"
+	//"maps"
 
 	"game/core" 
 	"game/player"
 )
 
-type PositionUpdateMessage struct {
+type Message struct {
 	Type string             `json:"type"`
-	Data PositionUpdateData `json:"data"`
+	Data SerializedState `json:"data"`
 }
 
-type PositionUpdateData struct {
-	Positions map[int][2]float32 `json:"positions"`
+type SerializedState struct {
+	Objects map[int]SerializedObject `json:"objects"`
 }
+
+type SerializedObject struct {
+	ID       int      `json:"id"`
+	Data     core.GameObject   `json:data`
+	Type     string   `json:"type"`
+}
+
 
 type Game struct {
 	Engine core.Engine
 
-	maxPlayers 		int
-	nextID        int
-	State         *State
-	PlayerIDs     map[int]string            
-	PlayersMu     sync.RWMutex              
+	maxPlayers 		    int
+	nextID            int
+	State             *State
+	PlayerIDs         map[int]string            
+	PlayersMu         sync.RWMutex              
 
 
-	CurrentPositions     map[int][2]float32
-	PrevPositions map[int][2]float32
+	PrevState         *State
 
-	UpdateMsg     PositionUpdateMessage
+	serializedState   *SerializedState
+
 	jsonBuffer        *bytes.Buffer
 	jsonEncoder       *json.Encoder
 
@@ -49,12 +57,6 @@ func NewGame(state *State,fixedTPS float64, targetFPS, maxPlayers int, l *log.Lo
 		nextID:        0,
 		PlayerIDs:     make(map[int]string),
 		log:           l,
-		CurrentPositions : make(map[int][2]float32),
-		PrevPositions : make(map[int][2]float32),
-		UpdateMsg: PositionUpdateMessage{
-			Type: "position_update",
-			Data: PositionUpdateData{},
-		},
 		jsonBuffer: bytes.NewBuffer(make([]byte, 0, 2048)),
 	}
 	g.jsonEncoder = json.NewEncoder(g.jsonBuffer)
@@ -98,10 +100,17 @@ func (g *Game) AddPlayer(p *player.Player) {
 
 	g.Engine.AddObject(p) 
 
-	joinMsg := map[string]interface{}{
+	joinMsg := map[string]any{
 		"type": "player_joined",
-		"data": map[string]interface{}{
+		"data": map[string]any{
 			"id":       p.ID(),
+			"type": "character",
+			"Data": map[string]any{
+				"position": map[string]any{
+					"X" : 0,
+					"Y" : 0,
+				},
+			},
 		},
 	}
 	jsonBytes, err := json.Marshal(joinMsg)
@@ -122,9 +131,9 @@ func (g *Game) RemovePlayer(p *player.Player) {
 
 	g.Engine.RemoveObject(p.ID()) 
 
-	leaveMsg := map[string]interface{}{
+	leaveMsg := map[string]any{
 		"type": "player_left",
-		"data": map[string]interface{}{
+		"data": map[string]any{
 			"id":     p.ID(),
 			"userID": p.UserID(),
 		},
@@ -154,87 +163,51 @@ func (g *Game) GetPlayerByID(playerID int) *player.Player {
     return g.State.Players[userID]
 }
 
+
 func (g *Game) OnFixedUpdate(delta float64) {
-	for k := range g.CurrentPositions {
-		delete(g.CurrentPositions, k)
-	}
 
 
-	g.PlayersMu.RLock()
-	if len(g.State.Players) == 0 {
-		g.PlayersMu.RUnlock()
-		for k := range g.PrevPositions {
-			delete(g.PrevPositions, k)
-		}
-		return
-	}
-	for _, p := range g.State.Players {
-		if p != nil {
-			pos := p.PositionXY()
-			g.CurrentPositions[p.ID()] = [2]float32{pos.X, pos.Y}
-		}
-	}
-	g.PlayersMu.RUnlock()
+	objects := make(map[int]SerializedObject)
 
-	deltaPositions := make(map[int][2]float32)
-	var removedIDs []int
+	for id, obj := range g.State.Base.Objects {
 
-	for prevID := range g.PrevPositions {
-		if _, exists := g.CurrentPositions[prevID]; !exists {
-			removedIDs = append(removedIDs, prevID)
+		if conc , ok := obj.(core.ConcreteObject); ok{
+
+
+			so := SerializedObject{
+				ID:   id,
+				Data: obj,
+				Type: conc.Type(),
+				//More MetaData as needed
+			}
+
+
+			objects[id] = so
 		}
 	}
 
-	for currentID, currentPos := range g.CurrentPositions {
-		prevPos, existsInPrev := g.PrevPositions[currentID]
-		if !existsInPrev || prevPos != currentPos {
-			deltaPositions[currentID] = currentPos
-		}
+	serialized := SerializedState{Objects: objects}
+
+	msg := Message{
+		Type: "position_update",
+		Data: serialized,
 	}
 
-	if len(deltaPositions) == 0 && len(removedIDs) == 0 {
-		for k := range g.PrevPositions {
-			delete(g.PrevPositions, k)
-		}
-		for id, pos := range g.CurrentPositions {
-			g.PrevPositions[id] = pos
-		}
-		return
-	}
+	jsonBuffer, err := json.Marshal(msg)
 
-	g.UpdateMsg.Data.Positions = deltaPositions
-
-	g.jsonBuffer.Reset()
-	err := g.jsonEncoder.Encode(g.UpdateMsg)
 	if err != nil {
-		g.log.Println("JSON marshal error for position update:", err)
-		for k := range g.PrevPositions {
-			delete(g.PrevPositions, k)
-		}
-		for id, pos := range g.CurrentPositions {
-			g.PrevPositions[id] = pos
-		}
 		return
 	}
 
-	jsonData := g.jsonBuffer.Bytes()
+	
 
 	if g.BroadcastFunc != nil {
-		g.BroadcastFunc(jsonData)
+		g.BroadcastFunc(jsonBuffer)
 	}
-
-	for k := range g.PrevPositions {
-		delete(g.PrevPositions, k)
-	}
-	for id, pos := range g.CurrentPositions {
-		g.PrevPositions[id] = pos
-	}
-
 }
 
 
 func (g *Game) OnVariableUpdate(delta float64) {
-	return
 }
 
 func (g *Game) HandleInputEvent(clientEv *core.ClientEvent, p *player.Player) {
@@ -261,7 +234,7 @@ func (g *Game) HandleInputMovement(clientEv *core.ClientEvent, p *player.Player)
 		return
 	}
 	playerID := p.ID()
-	effect := &core.MovementEffect{Direction: direction}
+	effect := &MovementEffect{Direction: direction}
 
 	gameEvent := &core.Event{
 		Effects: map[int][]core.IEffect{

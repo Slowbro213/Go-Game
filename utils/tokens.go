@@ -10,7 +10,11 @@ import (
 
 func GenerateToken() string {
 	b := make([]byte, 32)
-	rand.Read(b)
+	_ , err  := rand.Read(b)
+	if err != nil {
+		panic("Couldnt Generate Token")
+	}
+
 	return base64.URLEncoding.EncodeToString(b)
 }
 

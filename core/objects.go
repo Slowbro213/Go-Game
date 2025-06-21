@@ -18,16 +18,18 @@ type Entity interface {
 
 type ConcreteObject interface {
 	GameObject
+	Sprite()
+	Type() string
 	PositionXY() Point
 }
 
 type PhysicsObject interface {
-	GameObject
+	ConcreteObject
 	Entity
-	Velocity() Vector         
-	SetVelocity(Vector)       
-	ApplyForce(Vector)        
-	ApplyAcceleration(Vector)
+	Velocity() *Vector         
+	SetVelocity(*Vector)       
+	ApplyForce(*Vector)        
+	ApplyAcceleration(*Vector)
 }
 
 
@@ -35,29 +37,21 @@ type PhysicsObject interface {
 type NetworkObject interface {
 	GameObject
 	Conn() *websocket.Conn
-	CloseConn()
+	CloseConn() error
 	SetConn(*websocket.Conn)
 }
 
 
 type Notifiable interface {
 	Entity
-	Notify()
+	Notify(any)
 }
 
-type Character interface {
-	//Health()
-	//SetHealth()
-	//Mana()
-	Entity	
-	GetSpeed() float32
-	Move(string)
-}
 
 
 type State struct {
-
 	Objects   map[int]GameObject
+	ConcreteObjects map[int]ConcreteObject
 	Entities   map[int]Entity
-
+	PhysicsObjects map[int]PhysicsObject
 }

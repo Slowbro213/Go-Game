@@ -80,5 +80,8 @@ func main() {
 
 	//Server Start
 	fmt.Println("Server running at http://localhost:8080/")
-	http.ListenAndServe("0.0.0.0:8080", nil)
+	err := http.ListenAndServe("0.0.0.0:8080", nil)
+	if err != nil {
+		panic("Couldnt start server")
+	}
 }

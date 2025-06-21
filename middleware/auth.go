@@ -35,10 +35,12 @@ type AuthResult struct {
 	Error         error
 }
 
+type contextKey string
+
 const (
-	sessionName           = "poked-cookie"
-	sessionAuthenticated  = "authenticated"
-	ContextPlayerID       = "player_id"
+	sessionName                   = "poked-cookie"
+	sessionAuthenticated          = "authenticated"
+	ContextPlayerID contextKey    = "player_id"
 )
 
 // AuthMiddleware verifies session authentication
@@ -59,7 +61,6 @@ func (a *AuthService) AuthMiddleware() Middleware {
 						LinkText: "Login",
 
 					})
-					http.Error(w, "", http.StatusUnauthorized)
 					return
 				}
 
@@ -72,7 +73,6 @@ func (a *AuthService) AuthMiddleware() Middleware {
 						Link:     "/logout",
 						LinkText: "Logout",
 					})
-				http.Error(w, "", http.StatusForbidden)
 				return
 			}
 
@@ -97,7 +97,7 @@ func (a *AuthService) checkAuth(r *http.Request) AuthResult {
 		return AuthResult{Error: errors.New("not authenticated")}
 	}
 
-	userID, ok := session.Values[ContextPlayerID].(string)
+	userID, ok := session.Values[string(ContextPlayerID)].(string)
 	if !ok {
 		return AuthResult{Error: errors.New("invalid user ID in session")}
 	}

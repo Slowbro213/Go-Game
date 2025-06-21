@@ -119,6 +119,7 @@ func (e *Engine) runVariableUpdateLoop() {
 
 
 
+
 func (e *Engine) eventConsumer() {
 	for {
 		select {
@@ -126,15 +127,11 @@ func (e *Engine) eventConsumer() {
 			if !ok {
 				return
 			}
+
 			e.stateMu.Lock()
 			for objID, effects := range ev.Effects {
-				var obj GameObject
-
-				if o := e.State.Objects[objID]; o != nil {
-					obj = o
-				} else if o := e.State.Entities[objID]; o != nil {
-					obj = o
-				} else {
+				obj, exists := e.State.Objects[objID]
+				if !exists || obj == nil {
 					continue
 				}
 
@@ -143,12 +140,12 @@ func (e *Engine) eventConsumer() {
 				}
 			}
 			e.stateMu.Unlock()
+
 		case <-e.done:
 			return
 		}
 	}
 }
-
 
 
 
@@ -167,24 +164,35 @@ func (e *Engine) Shutdown() {
 
 
 func (e *Engine) AddObject(obj GameObject) {
+	id := obj.ID()
+
 	e.stateMu.Lock()
-	defer e.stateMu.Unlock() 
+	defer e.stateMu.Unlock()
+
+	e.State.Objects[id] = obj
 
 	if ent, ok := obj.(Entity); ok {
-		e.State.Entities[obj.ID()] = ent
-	}else{
-		e.State.Objects[obj.ID()] = obj
+		e.State.Entities[id] = ent
+	}
+	if phys, ok := obj.(PhysicsObject); ok {
+		e.State.PhysicsObjects[id] = phys
+	}
+	if con, ok := obj.(ConcreteObject); ok {
+		e.State.ConcreteObjects[id] = con
 	}
 }
 
 func (e *Engine) RemoveObject(id int) {
     e.stateMu.Lock()
-    delete(e.State.Objects, id)
-    e.stateMu.Unlock()
+		defer e.stateMu.Unlock()
 
-    e.stateMu.Lock()
+    delete(e.State.Objects, id)
+
     delete(e.State.Entities, id) 
-    e.stateMu.Unlock()
+
+		delete(e.State.ConcreteObjects,id)
+
+		delete(e.State.PhysicsObjects,id)
 }
 
 

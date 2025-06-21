@@ -62,7 +62,9 @@ func NewGameHandler(l *log.Logger, s *sessions.CookieStore) *GameHandler {
 
 	base := core.State{
 		Objects:   make(map[int]core.GameObject),
+		ConcreteObjects: make(map[int]core.ConcreteObject),
 		Entities:  make(map[int]core.Entity),
+		PhysicsObjects: make(map[int]core.PhysicsObject),
 	}
 
 	gameState := game.State{
@@ -123,10 +125,33 @@ func (g *GameHandler) Join(w http.ResponseWriter, r *http.Request) {
 
 	playerLogger := log.New(os.Stdout, fmt.Sprintf("Player %d [%s]: ", slot, userID), log.LstdFlags)
 	p := player.NewPlayer(slot, userID, 0, 0, playerBasePxPs, nil, playerLogger)
-	
+
+
 	g.game.AddPlayer(p) 
 
-	jsonBytes, err := json.Marshal(g.game.State.Base)
+
+	objects := make(map[int]game.SerializedObject)
+
+	for id, obj := range g.game.State.Base.Objects {
+
+		if conc , ok := obj.(core.ConcreteObject); ok{
+
+
+			so := game.SerializedObject{
+				ID:   id,
+				Data: obj,
+				Type: conc.Type(),
+				//More MetaData as needed
+			}
+
+
+			objects[id] = so
+		}
+	}
+
+	serialized := game.SerializedState{Objects: objects}
+
+	jsonBytes, err := json.Marshal(serialized)
 
 	if err != nil {
 		panic(err)
@@ -198,7 +223,12 @@ func (g *GameHandler) handlePlayerConnection(p *player.Player) {
 	defer func() {
 		g.game.RemovePlayer(p) 
 		g.log.Println("User Left:", p.ID(), "UserID:", p.UserID())
-		p.Conn().Close()
+		err := p.Conn().Close()
+
+		if err != nil {
+			g.log.Println("Error")
+		}
+
 	}()
 
 	for {

@@ -18,13 +18,4 @@ type Event struct {
 }
 
 
-type MovementEffect struct {
-	Direction string
-}
-
-func (e *MovementEffect) Apply(obj GameObject) {
-	if character, IsCharacter := obj.(Character); IsCharacter {
-		character.Move(e.Direction)
-	}
-}
 

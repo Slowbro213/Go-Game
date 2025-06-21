@@ -60,7 +60,6 @@ func (p *Player) OnTick(delta float64) {
 }
 
 func (p *Player) OnFrame(delta float64) {
-	return
 }
 
 func (p *Player) PositionXY() core.Point {
@@ -76,33 +75,41 @@ func (p *Player) SetVelocity(v *core.Vector) {
 	p.VelocityVec.VY = v.VY
 }
 
-func (p *Player) ApplyForce(v core.Vector) {
+func (p *Player) ApplyForce(v *core.Vector) {
 	p.VelocityVec.VX += v.VX
 	p.VelocityVec.VY += v.VY
 }
 
-func (p *Player) ApplyAcceleration(v core.Vector) {
+func (p *Player) ApplyAcceleration(v *core.Vector) {
 	p.VelocityVec.VX += v.VX
 	p.VelocityVec.VY += v.VY
+}
+
+func (p *Player) Sprite() {
+
 }
 
 func (p *Player) Conn() *websocket.Conn {
 	return p.conn
 }
 
-func (p *Player) CloseConn() {
-	p.conn.Close()
+func (p *Player) CloseConn() error {
+	return p.conn.Close()
 }
 
 func(p *Player) SetConn(c *websocket.Conn) {
 	p.conn = c
 }
 
-func (p *Player) Notify(bytes []byte) {
-	p.writeMu.Lock()
-	defer p.writeMu.Unlock()
-	if err := p.conn.WriteMessage(websocket.TextMessage, bytes); err != nil {
-		p.log.Println("Write error to player", p.ID(), ":", err)
+func (p *Player) Notify(msg any) {
+	if bytes ,ok:= msg.([]byte); !ok{
+		return
+	}else{
+		p.writeMu.Lock()
+		defer p.writeMu.Unlock()
+		if err := p.conn.WriteMessage(websocket.TextMessage, bytes); err != nil {
+			p.log.Println("Write error to player", p.ID(), ":", err)
+		}
 	}
 }
 
@@ -111,6 +118,9 @@ func (p *Player) GetSpeed() float32 {
 	return p.pxps
 }
 
+func (p *Player) Type() string {
+	return "character"
+}
 
 
 func (p *Player) Move(rawInput string) {
