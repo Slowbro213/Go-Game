@@ -5,6 +5,7 @@ export function setupSocket(token,onMessageCallback, onOpenCallback, onCloseCall
   if(token === null)
     return;
   socket = new WebSocket("ws://" + location.host + `/game?token=${token}`);
+  socket.binaryType = "arraybuffer";
 
   socket.onmessage = onMessageCallback;
   socket.onopen = onOpenCallback;

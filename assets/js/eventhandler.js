@@ -10,11 +10,12 @@ function PlayerLeft(data,players,game_container){
 
 
 function PlayerJoined(data, players, game_container) {
+  data = data[0];
   const playerId = data.id;
   const type = data.type || "character"; 
-  const pos = data.Data?.Position || { X: 0, Y: 0 };
-  const x = pos.X;
-  const y = pos.Y;
+  const pos = data.position || { x: 0, y: 0 };
+  const x = pos.x;
+  const y = pos.y;
 
   if (!players.has(playerId)) {
     const newPlayer = document.createElement('div');
@@ -32,12 +33,11 @@ function PlayerJoined(data, players, game_container) {
 
 
 function PositionUpdate(data, players, game_container) {
-  const objects = data.objects;
 
-  Object.entries(objects).forEach(([id, obj]) => {
-    const playerId = parseInt(id, 10);
-    const x = obj.Data.Position.X;
-    const y = obj.Data.Position.Y;
+    data.forEach((obj) => {
+    const playerId = obj.id
+    const x = obj.position.x;
+    const y = obj.position.y;
     const type = obj.type;
 
     if (!players.has(playerId)) {

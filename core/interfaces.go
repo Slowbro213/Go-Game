@@ -4,10 +4,33 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+type Typed struct {
+	Type string	
+}
+
+func (ty *Typed) SetType(t string){
+	ty.Type = t
+}
+
+func (ty *Typed) GetType() string{
+	return ty.Type
+}
+
+type Serializable interface {
+	ToBytes() []byte
+	ToDeltaBytes() []byte
+}
 
 type GameObject interface {
+	Serializable
 	ID() int 
 	Children() map[int]GameObject
+	AddChild(GameObject)
+	RemoveChild(int) GameObject
+	SetChild(int,GameObject)   
+	MarkClean()
+	MarkDirty()
+	IsDirty() bool
 }
 
 type Entity interface {
@@ -19,7 +42,6 @@ type Entity interface {
 type ConcreteObject interface {
 	GameObject
 	Sprite()
-	Type() string
 	PositionXY() Point
 }
 

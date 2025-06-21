@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"encoding/binary"
 	"fmt"
 	"log"
 	"net/http"
@@ -25,6 +26,7 @@ type TemplateData struct {
 	GameState template.JS
 	PlayerID  int 
 	Token     string
+	Binary    []byte
 }
 
 type PendingConnection struct {
@@ -129,29 +131,19 @@ func (g *GameHandler) Join(w http.ResponseWriter, r *http.Request) {
 
 	g.game.AddPlayer(p) 
 
+	var combined []byte
+	
+	for _, conc := range g.game.State.Base.Objects {
+		serialized := conc.ToBytes()
+		lengthBuf := make([]byte, 4)
+		binary.LittleEndian.PutUint32(lengthBuf, uint32(len(serialized)))	
 
-	objects := make(map[int]game.SerializedObject)
-
-	for id, obj := range g.game.State.Base.Objects {
-
-		if conc , ok := obj.(core.ConcreteObject); ok{
-
-
-			so := game.SerializedObject{
-				ID:   id,
-				Data: obj,
-				Type: conc.Type(),
-				//More MetaData as needed
-			}
-
-
-			objects[id] = so
-		}
+		combined = append(combined, lengthBuf...)   // [4 bytes: length]
+		combined = append(combined, serialized...)  // [n bytes: object]
 	}
+	
 
-	serialized := game.SerializedState{Objects: objects}
-
-	jsonBytes, err := json.Marshal(serialized)
+	jsonBytes, err := json.Marshal(g.game.State.Base.Objects)
 
 	if err != nil {
 		panic(err)
@@ -161,6 +153,7 @@ func (g *GameHandler) Join(w http.ResponseWriter, r *http.Request) {
 		GameState: template.JS(jsonBytes),
 		PlayerID: slot,
 		Token: token,
+		Binary: combined,
 	}
 
 	tmpl, err := template.ParseFiles("views/index.html")

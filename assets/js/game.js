@@ -2,12 +2,11 @@
 import { socket, setupSocket } from './socket.js';
 import { setupInput } from './input.js';
 import { createAnimator } from './animation.js';
+import { decode } from './decode.js';
 import { HandleEvent } from './eventhandler.js';
 
 const game_container = document.getElementById("game-container");
 const log = document.getElementById("log");
-
-console.log(window.GAMESTATE);
 
 const gameState = JSON.parse(window.GAMESTATE);
 
@@ -26,7 +25,7 @@ setupInput();
 setupSocket( token ,
   (e) => {
     //log.textContent += "Server: " + e.data + "\n";
-    const event = JSON.parse(e.data);
+    const event = decode(e.data);
     HandleEvent(event,players,game_container);
 
   },

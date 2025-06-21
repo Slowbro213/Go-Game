@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 	"encoding/json"
+	"encoding/binary"
 	"bytes"
 	//"maps"
 
@@ -14,18 +15,11 @@ import (
 
 type Message struct {
 	Type string             `json:"type"`
-	Data SerializedState `json:"data"`
+	//Data map[int]core.GameObject `json:"data"`
+	Data []byte
 }
 
-type SerializedState struct {
-	Objects map[int]SerializedObject `json:"objects"`
-}
 
-type SerializedObject struct {
-	ID       int      `json:"id"`
-	Data     core.GameObject   `json:data`
-	Type     string   `json:"type"`
-}
 
 
 type Game struct {
@@ -39,8 +33,6 @@ type Game struct {
 
 
 	PrevState         *State
-
-	serializedState   *SerializedState
 
 	jsonBuffer        *bytes.Buffer
 	jsonEncoder       *json.Encoder
@@ -91,6 +83,7 @@ func (g *Game) ReserveSpot() (int, bool) {
 	return slot, found
 }
 
+
 func (g *Game) AddPlayer(p *player.Player) {
 	g.PlayersMu.Lock()
 	defer g.PlayersMu.Unlock()
@@ -98,28 +91,29 @@ func (g *Game) AddPlayer(p *player.Player) {
 	g.State.Players[p.UserID()] = p
 	g.PlayerIDs[p.ID()] = p.UserID()
 
-	g.Engine.AddObject(p) 
+	g.Engine.AddObject(p)
 
-	joinMsg := map[string]any{
-		"type": "player_joined",
-		"data": map[string]any{
-			"id":       p.ID(),
-			"type": "character",
-			"Data": map[string]any{
-				"position": map[string]any{
-					"X" : 0,
-					"Y" : 0,
-				},
-			},
-		},
-	}
-	jsonBytes, err := json.Marshal(joinMsg)
-	if err != nil {
-		g.log.Println("JSON marshal error:", err)
-	} else {
-		g.BroadcastFunc(jsonBytes)
-	}
+	// --- Construct binary message ---
 
+	// 1. Message type prefix
+	msgType := "player_joined"
+	msgTypeBytes := []byte(msgType)
+	msgTypeLen := uint32(len(msgTypeBytes))
+
+	header := make([]byte, 4+len(msgTypeBytes))
+	binary.LittleEndian.PutUint32(header[:4], msgTypeLen)
+	copy(header[4:], msgTypeBytes)
+
+	// 2. Serialize the player object
+	playerBytes := p.ToBytes()
+
+	// 3. Combine header and object
+	fullMessage := append(header, playerBytes...)
+
+	// 4. Broadcast the binary message
+	if g.BroadcastFunc != nil {
+		g.BroadcastFunc(fullMessage)
+	}
 }
 
 func (g *Game) RemovePlayer(p *player.Player) {
@@ -164,47 +158,32 @@ func (g *Game) GetPlayerByID(playerID int) *player.Player {
 }
 
 
+
 func (g *Game) OnFixedUpdate(delta float64) {
+	var combined []byte
 
-
-	objects := make(map[int]SerializedObject)
-
-	for id, obj := range g.State.Base.Objects {
-
-		if conc , ok := obj.(core.ConcreteObject); ok{
-
-
-			so := SerializedObject{
-				ID:   id,
-				Data: obj,
-				Type: conc.Type(),
-				//More MetaData as needed
-			}
-
-
-			objects[id] = so
-		}
+	for _, conc := range g.State.Base.Objects {
+		serialized := conc.ToBytes()
+		combined = append(combined, serialized...)
 	}
 
-	serialized := SerializedState{Objects: objects}
+	typeStr := "position_update"
+	typeBytes := []byte(typeStr)
+	typeLen := uint32(len(typeBytes))
 
-	msg := Message{
-		Type: "position_update",
-		Data: serialized,
-	}
+	msgBuf := make([]byte, 4+len(typeBytes)+len(combined))
 
-	jsonBuffer, err := json.Marshal(msg)
+	binary.LittleEndian.PutUint32(msgBuf[0:4], typeLen)
 
-	if err != nil {
-		return
-	}
+	copy(msgBuf[4:4+len(typeBytes)], typeBytes)
 
-	
+	copy(msgBuf[4+len(typeBytes):], combined)
 
 	if g.BroadcastFunc != nil {
-		g.BroadcastFunc(jsonBuffer)
+		g.BroadcastFunc(msgBuf) // <- send raw binary
 	}
 }
+
 
 
 func (g *Game) OnVariableUpdate(delta float64) {

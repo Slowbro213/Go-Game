@@ -9,32 +9,26 @@ import (
 )
 
 type Player struct {
-	Id          int
+	core.Concrete
 	userID      string
-	Position    core.Point
 	VelocityVec core.Vector
 	conn        *websocket.Conn
 	log         *log.Logger
 	writeMu     sync.Mutex
 	pxps        float32
-
-	children map[int]core.GameObject
-
-
 }
 
 func NewPlayer(id int, userID string, x, y, pxps float32, conn *websocket.Conn, l *log.Logger) *Player {
 	p := &Player{
-		Id:          id,
 		userID:      userID,
-		Position:    core.Point{X: x, Y: y},
 		VelocityVec: core.Vector{VX: 0, VY: 0},
 		conn:        conn,
 		log:         l,
 		pxps:        pxps,
+		Concrete:    *core.NewConcreteObject(id,nil,core.Point{X:x, Y:y}),
 
-		children: nil,
 	}
+	p.SetType("character")
 	return p
 }
 
@@ -42,16 +36,9 @@ func (p *Player) UserID() string {
 	return p.userID
 }
 
-func (p *Player) ID() int {
-	return p.Id
-}
 
 func (p *Player) State() string {
 	return "Happy"
-}
-
-func (p *Player) Children() map[int]core.GameObject {
-	return p.children
 }
 
 func (p *Player) OnTick(delta float64) {
@@ -62,9 +49,6 @@ func (p *Player) OnTick(delta float64) {
 func (p *Player) OnFrame(delta float64) {
 }
 
-func (p *Player) PositionXY() core.Point {
-	return p.Position
-}
 
 func (p *Player) Velocity() *core.Vector {
 	return &p.VelocityVec
@@ -85,10 +69,6 @@ func (p *Player) ApplyAcceleration(v *core.Vector) {
 	p.VelocityVec.VY += v.VY
 }
 
-func (p *Player) Sprite() {
-
-}
-
 func (p *Player) Conn() *websocket.Conn {
 	return p.conn
 }
@@ -105,10 +85,12 @@ func (p *Player) Notify(msg any) {
 	if bytes ,ok:= msg.([]byte); !ok{
 		return
 	}else{
-		p.writeMu.Lock()
-		defer p.writeMu.Unlock()
-		if err := p.conn.WriteMessage(websocket.TextMessage, bytes); err != nil {
-			p.log.Println("Write error to player", p.ID(), ":", err)
+		if p.conn != nil {
+			p.writeMu.Lock()
+			defer p.writeMu.Unlock()
+			if err := p.conn.WriteMessage(websocket.BinaryMessage, bytes); err != nil {
+				p.log.Println("Write error to player", p.ID(), ":", err)
+			}
 		}
 	}
 }
@@ -117,11 +99,6 @@ func (p *Player) Notify(msg any) {
 func (p *Player) GetSpeed() float32 {
 	return p.pxps
 }
-
-func (p *Player) Type() string {
-	return "character"
-}
-
 
 func (p *Player) Move(rawInput string) {
 	var baseDirection core.Vector
