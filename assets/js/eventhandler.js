@@ -1,3 +1,4 @@
+//eventhandler.js
 import { createAnimator } from './animation.js';
 const eventsMap = new Map();
 

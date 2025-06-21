@@ -1,3 +1,4 @@
+//input.js
 import { socket } from './socket.js';
 
 const pressedKeys = new Set();

@@ -1,3 +1,5 @@
+//Deprecated!!!
+//decode.js
 export function decode(buf) {
   const view = new DataView(buf);
   let offset = 0;
@@ -40,7 +42,6 @@ export function decode(buf) {
     });
   }
 
-  console.log(objects);
   return {
     type: messageType,
     data: objects

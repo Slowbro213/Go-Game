@@ -64,22 +64,25 @@ func (o *Object) IsDirty() bool {
 
 //Serializable
 
-func (o *Object) ToBytes() []byte {
-	return encodeIDAndType(o.id, o.Type)
+func (o *Object) ToBytes(buf []byte, start int) int {
+	return writeIDAndType(buf, start, o.id, o.Type)
 }
 
-func (o *Object) ToDeltaBytes() []byte {
-	return encodeIDAndType(o.id, o.Type)
+
+func (o *Object) ToDeltaBytes(buf []byte, start int) int {
+	return writeIDAndType(buf, start, o.id, o.Type)
 }
 
+
+func (o *Object) Size() int {
+	return 4 + len(o.Type) 
+}
 
 
 //Helpers
-func encodeIDAndType(id int, objType string) []byte {
-	typeBytes := []byte(objType)
-	buf := make([]byte, 4+len(typeBytes)) 
-	binary.LittleEndian.PutUint32(buf[:4], uint32(id))
-	copy(buf[4:], typeBytes)
-	return buf
+func writeIDAndType(buf []byte, start int, id int, objType string) int {
+	binary.LittleEndian.PutUint32(buf[start:start+4], uint32(id))
+	copy(buf[start+4:], objType)
+	return 4 + len(objType)
 }
 

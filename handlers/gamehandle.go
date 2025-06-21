@@ -14,7 +14,7 @@ import (
 	"game/middleware"
 	"game/player"     
 	"game/utils"      
-	"game/game"
+	"game/gamebase"
 	"game/core"
 
 	"github.com/gorilla/sessions"
@@ -45,7 +45,7 @@ type GameHandler struct {
 
 	upgrader *websocket.Upgrader
 
-	game *game.Game 
+	game *gamebase.Game 
 
 	tokensMu      sync.Mutex
 	pendingTokens map[string]*PendingConnection
@@ -69,12 +69,12 @@ func NewGameHandler(l *log.Logger, s *sessions.CookieStore) *GameHandler {
 		PhysicsObjects: make(map[int]core.PhysicsObject),
 	}
 
-	gameState := game.State{
+	gameState := gamebase.State{
 		Base: &base,
 		Players: make(map[string]*player.Player),
 	}
 
-	handler.game = game.NewGame(&gameState,fixedTPS, targetFPS, maxPlayers ,l)
+	handler.game = gamebase.NewGame(&gameState,fixedTPS, targetFPS, maxPlayers ,l)
 
 	handler.game.BroadcastFunc = handler.broadcastMessage
 
@@ -131,15 +131,23 @@ func (g *GameHandler) Join(w http.ResponseWriter, r *http.Request) {
 
 	g.game.AddPlayer(p) 
 
-	var combined []byte
-	
-	for _, conc := range g.game.State.Base.Objects {
-		serialized := conc.ToBytes()
-		lengthBuf := make([]byte, 4)
-		binary.LittleEndian.PutUint32(lengthBuf, uint32(len(serialized)))	
 
-		combined = append(combined, lengthBuf...)   // [4 bytes: length]
-		combined = append(combined, serialized...)  // [n bytes: object]
+	totalSize := 0
+	for _, conc := range g.game.State.Base.Objects {
+		objSize := conc.Size()
+		totalSize += 4 + objSize
+	}
+
+	combined := make([]byte, totalSize)
+
+	offset := 0
+	for _, conc := range g.game.State.Base.Objects {
+		objSize := conc.Size()
+
+		binary.LittleEndian.PutUint32(combined[offset:offset+4], uint32(objSize))
+		offset += 4
+
+		offset += conc.ToBytes(combined, offset)
 	}
 	
 

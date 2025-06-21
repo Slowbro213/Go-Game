@@ -81,18 +81,15 @@ func(p *Player) SetConn(c *websocket.Conn) {
 	p.conn = c
 }
 
-func (p *Player) Notify(msg any) {
-	if bytes ,ok:= msg.([]byte); !ok{
-		return
-	}else{
-		if p.conn != nil {
-			p.writeMu.Lock()
-			defer p.writeMu.Unlock()
-			if err := p.conn.WriteMessage(websocket.BinaryMessage, bytes); err != nil {
-				p.log.Println("Write error to player", p.ID(), ":", err)
-			}
+func (p *Player) Notify(bytes []byte) {
+	if p.conn != nil {
+		p.writeMu.Lock()
+		defer p.writeMu.Unlock()
+		if err := p.conn.WriteMessage(websocket.BinaryMessage, bytes); err != nil {
+			p.log.Println("Write error to player", p.ID(), ":", err)
 		}
 	}
+
 }
 
 

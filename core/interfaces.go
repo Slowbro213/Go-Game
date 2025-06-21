@@ -17,8 +17,10 @@ func (ty *Typed) GetType() string{
 }
 
 type Serializable interface {
-	ToBytes() []byte
-	ToDeltaBytes() []byte
+	ToBytes(buf []byte, start int) int
+	Size() int
+	DeltaSize() int
+	ToDeltaBytes(buf []byte, start int) int
 }
 
 type GameObject interface {
@@ -66,7 +68,7 @@ type NetworkObject interface {
 
 type Notifiable interface {
 	Entity
-	Notify(any)
+	Notify([]byte)
 }
 
 

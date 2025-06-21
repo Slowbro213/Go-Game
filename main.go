@@ -4,11 +4,14 @@ package main
 import (
 	"fmt"
 	"net/http"
+	_ "net/http/pprof"
 	"log"
 	"game/handlers"
 	"game/middleware"
 	"github.com/gorilla/sessions"
 	"os"
+	//"time"
+	//"runtime"
 )
 
 
@@ -18,9 +21,11 @@ func main() {
 	//Static file serving
 	styles := http.FileServer(http.Dir("./assets/css"))
 	scripts := http.FileServer(http.Dir("./assets/js"))
+	wasm   := http.FileServer(http.Dir("./wasm"))
 	errors := http.FileServer(http.Dir("./views/errors"))
 	http.Handle("/assets/css/", http.StripPrefix("/assets/css/", styles))
 	http.Handle("/assets/js/", http.StripPrefix("/assets/js/", scripts))
+	http.Handle("/wasm/", http.StripPrefix("/wasm/", wasm))
 	http.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w,r,"./assets/icons8-spartan-helmet-16.png")
 	})
@@ -77,7 +82,15 @@ func main() {
 		middleware.Method("GET"),
 		))
 
-
+	//go func() {
+	//	for {
+	//		time.Sleep(2 * time.Second)
+	//		runtime.GC()
+	//	}
+	//}()
+	//go func() {
+	//	log.Println(http.ListenAndServe("localhost:6060", nil))
+	//}()
 	//Server Start
 	fmt.Println("Server running at http://localhost:8080/")
 	err := http.ListenAndServe("0.0.0.0:8080", nil)

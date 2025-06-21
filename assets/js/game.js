@@ -2,6 +2,7 @@
 import { socket, setupSocket } from './socket.js';
 import { setupInput } from './input.js';
 import { createAnimator } from './animation.js';
+//import  init, { decode } from '../../wasm/decoder/pkg/decoder.js';
 import { decode } from './decode.js';
 import { HandleEvent } from './eventhandler.js';
 
@@ -12,6 +13,11 @@ const gameState = JSON.parse(window.GAMESTATE);
 
 
 
+//async function setupWasmDecoder() {
+//  await init();
+//}
+//
+//await setupWasmDecoder()
 
 const players = new Map();
 

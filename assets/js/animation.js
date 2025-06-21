@@ -1,3 +1,4 @@
+//animation.js
 export function createAnimator(character) {
   let targetX = 0;
   let targetY = 0;

@@ -59,16 +59,19 @@ func (e *Engine) Run() {
 	}()
 }
 
+
 func (e *Engine) runFixedUpdateLoop() {
 	ticker := time.NewTicker(e.tickInterval)
 	defer ticker.Stop()
 
+
 	for {
 		select {
 		case <-ticker.C:
+			// Read memory before
 
-			e.stateMu.Lock() 
-			for _, ent := range e.State.Entities { 
+			e.stateMu.Lock()
+			for _, ent := range e.State.Entities {
 				ent.OnTick(e.fixedTickDelta)
 			}
 			e.stateMu.Unlock()
@@ -76,6 +79,8 @@ func (e *Engine) runFixedUpdateLoop() {
 			if e.OnFixedUpdate != nil {
 				e.OnFixedUpdate(e.fixedTickDelta)
 			}
+
+			
 		case <-e.done:
 			return
 		}
