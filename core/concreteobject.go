@@ -4,6 +4,7 @@ package core
 import (
 	"encoding/binary"
 	"math"
+//	"fmt"
 )
 
 type Concrete struct {
@@ -67,6 +68,8 @@ func (c *Concrete) ToDeltaBytes(buf []byte, start int) int {
 	// Write Position.Y
 	binary.LittleEndian.PutUint32(buf[offset:offset+4], math.Float32bits(c.Position.Y))
 	offset += 4
+
+//	fmt.Printf("Concrete: %v offset: %d\n",buf,offset)
 
 	return offset - start
 }

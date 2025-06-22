@@ -14,7 +14,7 @@ export function decode(buf) {
   const messageType = new TextDecoder().decode(typeBytes);
   offset += typeLen;
 
-  const TYPE_MAP = ["character", "enemy", "item"]; // Update to match your enum
+  const TYPE_MAP = ["character", "enemy", "item"];
 
   const objects = [];
   while (offset < buf.byteLength) {

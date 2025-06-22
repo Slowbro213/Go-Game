@@ -72,7 +72,9 @@ func main() {
 	))
 
 
-
+	http.HandleFunc("/triangle", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w,r,"./views/triangle.html")
+	})
 
 
 	http.HandleFunc("/", middleware.Chain(

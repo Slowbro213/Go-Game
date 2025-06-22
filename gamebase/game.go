@@ -1,16 +1,18 @@
 package gamebase
 
 import (
+	"bytes"
+	"encoding/binary"
+	"encoding/json"
+	//"fmt"
 	"log"
 	"sync"
 	"time"
-	"encoding/json"
-	"encoding/binary"
-	"bytes"
-	"fmt"
+
+	//"fmt"
 	//"maps"
 
-	"game/core" 
+	"game/core"
 	"game/player"
 )
 
@@ -197,23 +199,29 @@ func (g *Game) OnFixedUpdate(delta float64) {
 	totalSize := 4 + typeLen + payloadSize
 	buf := bufPool.Get().([]byte)[:totalSize]
 	offset := 0
+	for i := range buf {
+		buf[i] = 0
+	}
 
 	copy(buf[offset:offset+4], typeLenBytes)
 	offset += 4
 	copy(buf[offset:offset+typeLen], typeBytes)
 	offset += typeLen
 
+
 	initOffset := offset
 	for _, conc := range g.State.Base.Objects {
 		if !conc.IsDirty() {
 			continue
 		}
+	//	fmt.Printf("Inital Buffer just after message: %v\n",buf)
 		offset += conc.ToDeltaBytes(buf, offset)
+		//fmt.Printf("Raw bytes: % x\n", buf[:offset])
+
 	}
 
 
 	if g.BroadcastFunc != nil && offset > initOffset {
-		g.log.Println(fmt.Sprintf("SENDING [%d bytes]: % x\n", offset, buf[:offset]))
 		g.BroadcastFunc(buf[:offset])
 	}
 

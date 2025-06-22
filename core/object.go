@@ -2,6 +2,7 @@ package core
 
 import (
 	"encoding/binary"
+	//"fmt"
 )
 
 
@@ -83,6 +84,10 @@ func (o *Object) Size() int {
 func writeIDAndType(buf []byte, start int, id int, objType ObjectType) int {
 	binary.LittleEndian.PutUint32(buf[start:start+4], uint32(id))
 	buf[start+4] = byte(objType)
+//	fmt.Printf("Object %v\n", buf)
+//	fmt.Printf("Object id %d\n",id)
+//	fmt.Printf("Object type %v\n",objType)
+
 	return 5 // 4 bytes ID + 1 byte type
 }
 

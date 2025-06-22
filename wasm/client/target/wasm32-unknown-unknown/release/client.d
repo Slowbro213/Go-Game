@@ -1,0 +1,1 @@
+/home/slowking/Desktop/GO/docs_http/wasm/client/target/wasm32-unknown-unknown/release/client.wasm: /home/slowking/Desktop/GO/docs_http/wasm/client/src/decoder.rs /home/slowking/Desktop/GO/docs_http/wasm/client/src/lib.rs /home/slowking/Desktop/GO/docs_http/wasm/client/src/triangle.rs
