@@ -33,5 +33,5 @@ go.work.sum
 
 
 
-target
+wasm/client/target
 pkg
